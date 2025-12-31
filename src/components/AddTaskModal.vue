@@ -87,9 +87,9 @@ const handleSubmit = () => {
   <Teleport to="body">
     <div
       v-if="isOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity"
     >
-      <div class="bg-white dark:bg-[#1e293b] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-700 transform transition-all scale-100">
+      <div class="bg-white dark:bg-[#1e293b] rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-700 transform transition-all scale-100 pb-safe sm:pb-0">
         <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-700">
           <h3 class="text-lg font-bold text-slate-900 dark:text-white">Add New Task</h3>
           <button 

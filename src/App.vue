@@ -208,12 +208,20 @@ const categoryValues = Object.values(Category);
           </div>
           <button
             @click="isAddModalOpen = true"
-            class="flex items-center justify-center gap-2 overflow-hidden rounded-xl h-12 px-6 bg-primary hover:bg-primary/90 transition-all active:scale-95 text-white text-base font-bold shadow-lg shadow-primary/20"
+            class="hidden md:flex items-center justify-center gap-2 overflow-hidden rounded-xl h-12 px-6 bg-primary hover:bg-primary/90 transition-all active:scale-95 text-white text-base font-bold shadow-lg shadow-primary/20"
           >
             <span class="material-symbols-outlined text-[20px]">add</span>
             <span class="truncate">Add New Task</span>
           </button>
         </div>
+
+        <!-- Mobile FAB (Floating Action Button) -->
+        <button
+          @click="isAddModalOpen = true"
+          class="md:hidden fixed bottom-6 right-6 z-40 size-14 flex items-center justify-center rounded-2xl bg-primary text-white shadow-xl shadow-primary/30 hover:bg-primary/90 active:scale-90 transition-all"
+        >
+          <span class="material-symbols-outlined text-[28px]">add</span>
+        </button>
 
         <!-- Loading State for Tasks -->
         <div v-if="tasksLoading && tasks.length === 0" class="flex justify-center py-12">

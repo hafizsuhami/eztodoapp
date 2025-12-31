@@ -60,7 +60,7 @@ const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
   >
     <div class="flex items-start gap-4 flex-1 w-full">
       <!-- Checkbox -->
-      <label class="relative flex items-center p-0 mt-1 cursor-pointer shrink-0">
+      <label class="relative flex items-center p-2 -m-2 mt-0 cursor-pointer shrink-0">
         <input 
           type="checkbox" 
           :checked="task.is_completed"
@@ -86,11 +86,11 @@ const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
           </span>
           
           <!-- Mobile Actions -->
-          <span class="flex sm:hidden ml-auto gap-2 shrink-0">
-             <button @click="emit('edit', task.id)" class="text-slate-400 hover:text-primary">
+          <span class="flex sm:hidden ml-auto gap-3 shrink-0">
+             <button @click="emit('edit', task.id)" class="text-slate-400 active:text-primary p-1 -m-1">
               <span class="material-symbols-outlined text-[20px]">edit</span>
              </button>
-             <button @click="handleDeleteClick" class="text-slate-400 hover:text-red-500">
+             <button @click="handleDeleteClick" class="text-slate-400 active:text-red-500 p-1 -m-1">
               <span class="material-symbols-outlined text-[20px]">delete</span>
              </button>
           </span>

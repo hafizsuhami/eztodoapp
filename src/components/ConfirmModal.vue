@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 
 const props = withDefaults(defineProps<{
   isOpen: boolean;
@@ -23,14 +23,49 @@ const emit = defineEmits<{
   cancel: [];
 }>();
 
+const modalRef = ref<HTMLDivElement | null>(null);
+const confirmButtonRef = ref<HTMLButtonElement | null>(null);
+let previousActiveElement: HTMLElement | null = null;
+
+const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+const trapFocus = (event: KeyboardEvent) => {
+  if (!props.isOpen || !modalRef.value) return;
+  if (event.key !== 'Tab') return;
+  
+  const focusableElements = modalRef.value.querySelectorAll(focusableSelectors);
+  const firstElement = focusableElements[0] as HTMLElement;
+  const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+  
+  if (event.shiftKey && document.activeElement === firstElement) {
+    event.preventDefault();
+    lastElement.focus();
+  } else if (!event.shiftKey && document.activeElement === lastElement) {
+    event.preventDefault();
+    firstElement.focus();
+  }
+};
+
 const handleKeydown = (e: KeyboardEvent) => {
   if (!props.isOpen) return;
   if (e.key === 'Escape') {
     emit('cancel');
-  } else if (e.key === 'Enter') {
-    emit('confirm');
   }
 };
+
+watch(() => props.isOpen, async (open) => {
+  if (open) {
+    previousActiveElement = document.activeElement as HTMLElement;
+    await nextTick();
+    // Focus cancel button by default for safety (not the destructive action)
+    const cancelBtn = modalRef.value?.querySelector('[data-cancel-btn]') as HTMLElement;
+    cancelBtn?.focus();
+    document.addEventListener('keydown', trapFocus);
+  } else {
+    document.removeEventListener('keydown', trapFocus);
+    previousActiveElement?.focus();
+  }
+});
 
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown);
@@ -38,6 +73,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown);
+  document.removeEventListener('keydown', trapFocus);
 });
 
 const variantClasses = {
@@ -69,6 +105,10 @@ const variantClasses = {
       <div
         v-if="isOpen"
         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="'confirm-modal-title'"
+        :aria-describedby="'confirm-modal-message'"
         @click.self="emit('cancel')"
       >
         <Transition
@@ -81,6 +121,7 @@ const variantClasses = {
         >
           <div
             v-if="isOpen"
+            ref="modalRef"
             class="bg-white dark:bg-[#1e293b] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200 dark:border-slate-700"
           >
             <!-- Content -->
@@ -91,17 +132,18 @@ const variantClasses = {
                   'size-16 rounded-full flex items-center justify-center mb-4',
                   variantClasses[variant].icon
                 ]"
+                aria-hidden="true"
               >
                 <span class="material-symbols-outlined text-[32px]">{{ icon }}</span>
               </div>
 
               <!-- Title -->
-              <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-2">
+              <h3 id="confirm-modal-title" class="text-lg font-bold text-slate-900 dark:text-white mb-2">
                 {{ title }}
               </h3>
 
               <!-- Message -->
-              <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+              <p id="confirm-modal-message" class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                 {{ message }}
               </p>
             </div>
@@ -109,15 +151,17 @@ const variantClasses = {
             <!-- Actions -->
             <div class="flex gap-3 px-6 pb-6">
               <button
+                data-cancel-btn
                 @click="emit('cancel')"
-                class="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                class="flex-1 py-3 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400/50"
               >
                 {{ cancelText }}
               </button>
               <button
+                ref="confirmButtonRef"
                 @click="emit('confirm')"
                 :class="[
-                  'flex-1 py-3 px-4 rounded-xl text-white font-semibold shadow-lg transition-all',
+                  'flex-1 py-3 px-4 rounded-xl text-white font-semibold shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-offset-2',
                   variantClasses[variant].button
                 ]"
               >

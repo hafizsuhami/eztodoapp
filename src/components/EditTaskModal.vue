@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, nextTick } from 'vue';
 import type { Task, CategoryOption, CategoryId, Subtask } from '../types';
 
 const props = defineProps<{
@@ -26,6 +26,30 @@ let recognition: any = null;
 // New subtask input
 const newSubtaskTitle = ref('');
 
+// Focus trap refs
+const modalRef = ref<HTMLDivElement | null>(null);
+const titleInputRef = ref<HTMLInputElement | null>(null);
+let previousActiveElement: HTMLElement | null = null;
+
+const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+const trapFocus = (event: KeyboardEvent) => {
+  if (!props.isOpen || !modalRef.value) return;
+  if (event.key !== 'Tab') return;
+  
+  const focusableElements = modalRef.value.querySelectorAll(focusableSelectors);
+  const firstElement = focusableElements[0] as HTMLElement;
+  const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+  
+  if (event.shiftKey && document.activeElement === firstElement) {
+    event.preventDefault();
+    lastElement.focus();
+  } else if (!event.shiftKey && document.activeElement === lastElement) {
+    event.preventDefault();
+    firstElement.focus();
+  }
+};
+
 // Populate form when task changes
 watch(() => props.task, (task) => {
   if (task) {
@@ -37,13 +61,20 @@ watch(() => props.task, (task) => {
 }, { immediate: true });
 
 // Reset when modal closes
-watch(() => props.isOpen, (open) => {
-  if (!open) {
+watch(() => props.isOpen, async (open) => {
+  if (open) {
+    previousActiveElement = document.activeElement as HTMLElement;
+    await nextTick();
+    titleInputRef.value?.focus();
+    document.addEventListener('keydown', trapFocus);
+  } else {
     isListening.value = false;
     newSubtaskTitle.value = '';
     if (recognition) {
       recognition.stop();
     }
+    document.removeEventListener('keydown', trapFocus);
+    previousActiveElement?.focus();
   }
 });
 
@@ -163,6 +194,9 @@ const handleClose = () => {
       <div
         v-if="isOpen && task"
         class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/50 backdrop-blur-sm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-task-modal-title"
         @click.self="handleClose"
       >
         <Transition
@@ -175,16 +209,18 @@ const handleClose = () => {
         >
           <div
             v-if="isOpen && task"
+            ref="modalRef"
             class="bg-white dark:bg-[#1e293b] rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200 dark:border-slate-700 transform transition-all pb-safe sm:pb-0"
           >
             <!-- Header -->
             <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-700">
-              <h3 class="text-lg font-bold text-slate-900 dark:text-white">Edit Task</h3>
+              <h3 id="edit-task-modal-title" class="text-lg font-bold text-slate-900 dark:text-white">Edit Task</h3>
               <button 
                 @click="handleClose"
-                class="text-slate-400 hover:text-slate-500 dark:hover:text-slate-300 transition-colors"
+                class="text-slate-400 hover:text-slate-500 dark:hover:text-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 rounded"
+                aria-label="Close modal"
               >
-                <span class="material-symbols-outlined">close</span>
+                <span class="material-symbols-outlined" aria-hidden="true">close</span>
               </button>
             </div>
 
@@ -192,32 +228,34 @@ const handleClose = () => {
             <form @submit.prevent="handleSubmit" class="px-4 py-5 flex flex-col gap-4 max-h-[70vh] overflow-y-auto">
               <!-- Task Title -->
               <div class="flex flex-col gap-1.5">
-                <label class="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                <label for="edit-task-title" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
                   Task Title
                 </label>
                 <div class="relative">
                   <input
+                    id="edit-task-title"
+                    ref="titleInputRef"
                     v-model="editTitle"
                     type="text"
                     placeholder="What needs to be done?"
                     class="w-full bg-slate-50 dark:bg-[#161f30] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 pr-12 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    autofocus
                   />
                   <button
                     type="button"
                     @click="toggleListening"
                     :class="[
-                      'absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all',
+                      'absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-primary/50',
                       isListening 
                         ? 'text-red-500 bg-red-500/10 animate-pulse' 
                         : 'text-slate-400 hover:text-primary hover:bg-slate-200 dark:hover:bg-slate-700'
                     ]"
-                    :title="isListening ? 'Stop Listening' : 'Speak to type'"
+                    :aria-label="isListening ? 'Stop voice input' : 'Start voice input'"
+                    :aria-pressed="isListening"
                   >
-                    <span class="material-symbols-outlined text-[20px]">mic</span>
+                    <span class="material-symbols-outlined text-[20px]" aria-hidden="true">mic</span>
                   </button>
                 </div>
-                <p v-if="isListening" class="text-xs text-primary font-medium ml-1 animate-pulse">Listening...</p>
+                <p v-if="isListening" class="text-xs text-primary font-medium ml-1 animate-pulse" role="status">Listening...</p>
               </div>
 
               <!-- Due Date -->

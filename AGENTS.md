@@ -13,10 +13,10 @@ This document provides guidelines for AI coding agents working in this repositor
 ## Build/Dev Commands
 
 ```bash
-npm install          # Install dependencies
-npm run dev          # Start dev server (port 3000)
-npm run build        # Production build
-npm run preview      # Preview production build
+bun install          # Install dependencies
+bun run dev          # Start dev server (port 3000)
+bun run build        # Production build
+bun run preview      # Preview production build
 ```
 
 ## Testing

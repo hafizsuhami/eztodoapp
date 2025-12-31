@@ -1,6 +1,6 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { supabase } from '../services/supabase';
-import type { Task, Category, Subtask } from '../types';
+import type { Task, Subtask } from '../types';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import {
   getCachedTasks,
@@ -117,6 +117,7 @@ export function useTasks(userId: () => string | undefined) {
 
     if (isOnline()) {
       try {
+        syncStatus.value = 'syncing';
         const { data: created, error: createError } = await supabase
           .from('tasks')
           .insert({
@@ -138,6 +139,7 @@ export function useTasks(userId: () => string | undefined) {
         // Replace temp task with real one
         tasks.value = tasks.value.map(t => t.id === tempId ? created : t);
         setCachedTasks(tasks.value);
+        syncStatus.value = 'synced';
       } catch (e) {
         console.error('Failed to create task:', e);
         // Queue for later
@@ -146,6 +148,7 @@ export function useTasks(userId: () => string | undefined) {
       }
     } else {
       addToQueue({ type: 'create', data: newTask, tempId });
+      syncStatus.value = 'offline';
     }
   };
 
@@ -156,19 +159,22 @@ export function useTasks(userId: () => string | undefined) {
 
     if (isOnline() && !taskId.startsWith('temp_')) {
       try {
+        syncStatus.value = 'syncing';
         const { error: updateError } = await supabase
           .from('tasks')
           .update(data)
           .eq('id', taskId);
         
         if (updateError) throw updateError;
+        syncStatus.value = 'synced';
       } catch (e) {
         console.error('Failed to update task:', e);
         addToQueue({ type: 'update', recordId: taskId, data });
         syncStatus.value = 'offline';
       }
-    } else {
+    } else if (!isOnline()) {
       addToQueue({ type: 'update', recordId: taskId, data });
+      syncStatus.value = 'offline';
     }
   };
 
@@ -179,19 +185,22 @@ export function useTasks(userId: () => string | undefined) {
 
     if (isOnline() && !taskId.startsWith('temp_')) {
       try {
+        syncStatus.value = 'syncing';
         const { error: deleteError } = await supabase
           .from('tasks')
           .delete()
           .eq('id', taskId);
         
         if (deleteError) throw deleteError;
+        syncStatus.value = 'synced';
       } catch (e) {
         console.error('Failed to delete task:', e);
         addToQueue({ type: 'delete', recordId: taskId });
         syncStatus.value = 'offline';
       }
-    } else {
+    } else if (!isOnline()) {
       addToQueue({ type: 'delete', recordId: taskId });
+      syncStatus.value = 'offline';
     }
   };
 
@@ -200,7 +209,7 @@ export function useTasks(userId: () => string | undefined) {
     return updateTask(taskId, { is_completed: !is_completed });
   };
 
-  const updateTaskCategory = (taskId: string, category: Category) => {
+  const updateTaskCategory = (taskId: string, category: string) => {
     return updateTask(taskId, { category });
   };
 

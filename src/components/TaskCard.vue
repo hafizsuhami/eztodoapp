@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import type { Task, Category } from '../types';
-import { CATEGORY_COLORS } from '../constants';
-import { Category as CategoryEnum } from '../types';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
+import type { Task, CategoryOption, CategoryId } from '../types';
+import ConfirmModal from './ConfirmModal.vue';
 
 const props = defineProps<{
   task: Task;
+  categories: CategoryOption[];
 }>();
 
 const emit = defineEmits<{
@@ -15,13 +15,16 @@ const emit = defineEmits<{
   toggleSubtask: [taskId: string, subtaskId: string];
   deleteSubtask: [taskId: string, subtaskId: string];
   updateSubtaskTitle: [taskId: string, subtaskId: string, newTitle: string];
-  updateCategory: [taskId: string, newCategory: Category];
+  updateCategory: [taskId: string, newCategory: CategoryId];
 }>();
 
 const isCategoryOpen = ref(false);
 const categoryMenuRef = ref<HTMLDivElement | null>(null);
+const showDeleteConfirm = ref(false);
 
-const categoryColor = CATEGORY_COLORS[props.task.category] || 'bg-slate-500';
+const currentCategory = computed(() => {
+  return props.categories.find(c => c.id === props.task.category) || { id: '', name: 'Unknown', color: '#94a3b8' };
+});
 
 const handleClickOutside = (event: MouseEvent) => {
   if (categoryMenuRef.value && !categoryMenuRef.value.contains(event.target as Node)) {
@@ -38,9 +41,12 @@ onUnmounted(() => {
 });
 
 const handleDeleteClick = () => {
-  if (window.confirm('Are you sure you want to delete this task?')) {
-    emit('delete');
-  }
+  showDeleteConfirm.value = true;
+};
+
+const handleConfirmDelete = () => {
+  showDeleteConfirm.value = false;
+  emit('delete');
 };
 
 const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
@@ -153,8 +159,12 @@ const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
               ]"
               title="Change Category"
             >
-              <span :class="['size-2 rounded-full', categoryColor, task.is_completed ? 'opacity-50' : '']"></span>
-              {{ task.category }}
+              <span 
+                class="size-2 rounded-full"
+                :style="{ backgroundColor: currentCategory.color }"
+                :class="[task.is_completed ? 'opacity-50' : '']"
+              ></span>
+              {{ currentCategory.name }}
             </button>
 
             <div
@@ -162,16 +172,16 @@ const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
               class="absolute bottom-full mb-1 left-0 w-32 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 py-1 flex flex-col overflow-hidden"
             >
               <button
-                v-for="cat in Object.values(CategoryEnum)"
-                :key="cat"
-                @click="emit('updateCategory', task.id, cat); isCategoryOpen = false"
+                v-for="cat in categories"
+                :key="cat.id"
+                @click="emit('updateCategory', task.id, cat.id); isCategoryOpen = false"
                 :class="[
                   'flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-700/50',
-                  task.category === cat ? 'bg-slate-50 dark:bg-slate-800 font-medium text-primary' : 'text-slate-700 dark:text-slate-300'
+                  task.category === cat.id ? 'bg-slate-50 dark:bg-slate-800 font-medium text-primary' : 'text-slate-700 dark:text-slate-300'
                 ]"
               >
-                <span :class="['size-2 rounded-full', CATEGORY_COLORS[cat]]"></span>
-                {{ cat }}
+                <span class="size-2 rounded-full" :style="{ backgroundColor: cat.color }"></span>
+                {{ cat.name }}
               </button>
             </div>
           </div>
@@ -203,4 +213,17 @@ const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
       </button>
     </div>
   </div>
+
+  <!-- Delete Confirmation Modal -->
+  <ConfirmModal
+    :is-open="showDeleteConfirm"
+    title="Delete Task"
+    :message="`Are you sure you want to delete '${task.title}'? This action cannot be undone.`"
+    confirm-text="Delete"
+    cancel-text="Cancel"
+    variant="danger"
+    icon="delete"
+    @confirm="handleConfirmDelete"
+    @cancel="showDeleteConfirm = false"
+  />
 </template>

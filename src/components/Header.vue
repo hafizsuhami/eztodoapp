@@ -14,7 +14,20 @@ const emit = defineEmits<{
   logout: [];
 }>();
 
-const { isDark, toggleTheme } = useTheme();
+const { isDark, activeTheme, setTheme, toggleTheme } = useTheme(
+  () => props.user?.id,
+  () => props.user?.theme
+);
+
+const themes = [
+  { key: 'light', label: 'Light' },
+  { key: 'dark', label: 'Dark' },
+  { key: 'dim', label: 'Dim' },
+  { key: 'sepia', label: 'Sepia' },
+  { key: 'vibrantPurple', label: 'Vibrant Purple' },
+  { key: 'blush', label: 'Blush' },
+  { key: 'playful', label: 'Playful Kids' }
+];
 </script>
 
 <template>
@@ -30,15 +43,29 @@ const { isDark, toggleTheme } = useTheme();
       <SyncIndicator :status="syncStatus || 'synced'" />
 
       <!-- Theme Toggle -->
-      <button 
-        @click="toggleTheme"
-        class="flex items-center justify-center size-9 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-        :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
-      >
-        <span class="material-symbols-outlined text-[20px]">
-          {{ isDark ? 'light_mode' : 'dark_mode' }}
-        </span>
-      </button>
+      <div class="relative group">
+        <button 
+          class="flex items-center justify-center size-9 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title="Switch theme"
+        >
+          <span class="material-symbols-outlined text-[20px]">
+            palette
+          </span>
+        </button>
+        <div class="absolute right-0 mt-2 w-40 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+          <div class="py-2 flex flex-col">
+            <button
+              v-for="theme in themes"
+              :key="theme.key"
+              @click="setTheme(theme.key)"
+              class="flex items-center justify-between px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              <span>{{ theme.label }}</span>
+              <span v-if="activeTheme === theme.key" class="material-symbols-outlined text-[16px] text-primary">check</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       <!-- User Profile -->
       <div v-if="user" class="flex items-center gap-3">

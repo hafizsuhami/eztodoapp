@@ -1,11 +1,12 @@
-export enum Category {
-  Work = 'Work',
-  Personal = 'Personal',
-  Health = 'Health',
-  Family = 'Family'
+export interface CategoryOption {
+  id: string;
+  name: string;
+  color: string;
 }
 
+export type CategoryId = string;
 export type TaskStatus = 'all' | 'active' | 'completed';
+export type ThemeName = keyof typeof import('./constants').THEME_PRESETS;
 
 export interface Subtask {
   id: string;
@@ -18,7 +19,7 @@ export interface Task {
   user_id: string;
   title: string;
   is_completed: boolean;
-  category: Category;
+  category: CategoryId;
   due_date: string;
   due_date_color?: string;
   due_date_bg?: string;

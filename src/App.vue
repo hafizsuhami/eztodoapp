@@ -3,10 +3,14 @@ import { ref, computed } from 'vue';
 import Header from './components/Header.vue';
 import TaskCard from './components/TaskCard.vue';
 import AddTaskModal from './components/AddTaskModal.vue';
+import EditTaskModal from './components/EditTaskModal.vue';
 import LoginModal from './components/LoginModal.vue';
-import { Category, type TaskStatus, type Subtask } from './types';
+import CategoryManagerModal from './components/CategoryManagerModal.vue';
+import ConfirmModal from './components/ConfirmModal.vue';
+import { type TaskStatus, type Subtask, type CategoryId, type Task } from './types';
 import { useAuth } from './composables/useAuth';
 import { useTasks } from './composables/useTasks';
+import { useCategories } from './composables/useCategories';
 
 // Auth composable
 const { user, loading: authLoading, isAuthenticated, loginWithGoogle, logout } = useAuth();
@@ -25,11 +29,30 @@ const {
   updateSubtasks
 } = useTasks(getUserId);
 
+// Categories composable
+const {
+  categories,
+  loading: categoriesLoading,
+  getCategoryById,
+  createCategory,
+  updateCategory: updateCategoryFn,
+  deleteCategory: deleteCategoryFn
+} = useCategories(getUserId);
+
 // Local state
 const activeTab = ref<TaskStatus>('active');
 const searchQuery = ref('');
-const categoryFilter = ref<Category | null>(null);
+const categoryFilter = ref<CategoryId | null>(null);
 const isAddModalOpen = ref(false);
+const isCategoryManagerOpen = ref(false);
+
+// Edit task modal state
+const isEditModalOpen = ref(false);
+const taskToEdit = ref<Task | null>(null);
+
+// Subtask delete confirmation state
+const showSubtaskDeleteConfirm = ref(false);
+const subtaskToDelete = ref<{ taskId: string; subtaskId: string; title: string } | null>(null);
 
 // Computed values
 const activeCount = computed(() => tasks.value.filter(t => !t.is_completed).length);
@@ -46,13 +69,32 @@ const filteredTasks = computed(() => {
     // 3. Search Filter
     if (searchQuery.value) {
       const query = searchQuery.value.toLowerCase();
+      const cat = getCategoryById(task.category);
+      const catName = cat?.name?.toLowerCase() || '';
       return task.title.toLowerCase().includes(query) ||
-             task.category.toLowerCase().includes(query) ||
+             catName.includes(query) ||
              task.subtasks?.some(s => s.title.toLowerCase().includes(query));
     }
 
     return true;
   });
+});
+
+// Greeting helpers
+const greetingMessage = computed(() => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good Morning';
+  if (hour < 18) return 'Good Afternoon';
+  return 'Good Evening';
+});
+
+const currentDate = computed(() => {
+  const now = new Date();
+  const weekday = now.toLocaleDateString('en-US', { weekday: 'short' });
+  const day = now.toLocaleDateString('en-US', { day: '2-digit' });
+  const month = now.toLocaleDateString('en-US', { month: 'short' });
+  const year = now.getFullYear();
+  return `${weekday} ${day} ${month} ${year}`;
 });
 
 // Get user's first name for greeting
@@ -80,13 +122,26 @@ const handleToggleSubtask = (taskId: string, subtaskId: string) => {
 };
 
 const handleDeleteSubtask = (taskId: string, subtaskId: string) => {
-  if (window.confirm("Are you sure you want to delete this subtask?")) {
-    const task = tasks.value.find(t => t.id === taskId);
-    if (task && task.subtasks) {
-      const updatedSubtasks = task.subtasks.filter(s => s.id !== subtaskId);
-      updateSubtasks(taskId, updatedSubtasks);
+  const task = tasks.value.find(t => t.id === taskId);
+  if (task && task.subtasks) {
+    const subtask = task.subtasks.find(s => s.id === subtaskId);
+    if (subtask) {
+      subtaskToDelete.value = { taskId, subtaskId, title: subtask.title };
+      showSubtaskDeleteConfirm.value = true;
     }
   }
+};
+
+const handleConfirmSubtaskDelete = () => {
+  if (subtaskToDelete.value) {
+    const task = tasks.value.find(t => t.id === subtaskToDelete.value!.taskId);
+    if (task && task.subtasks) {
+      const updatedSubtasks = task.subtasks.filter(s => s.id !== subtaskToDelete.value!.subtaskId);
+      updateSubtasks(subtaskToDelete.value.taskId, updatedSubtasks);
+    }
+  }
+  showSubtaskDeleteConfirm.value = false;
+  subtaskToDelete.value = null;
 };
 
 const handleUpdateSubtaskTitle = (taskId: string, subtaskId: string, newTitle: string) => {
@@ -99,7 +154,7 @@ const handleUpdateSubtaskTitle = (taskId: string, subtaskId: string, newTitle: s
   }
 };
 
-const handleUpdateTaskCategory = (taskId: string, newCategory: Category) => {
+const handleUpdateTaskCategory = (taskId: string, newCategory: CategoryId) => {
   updateTaskCategory(taskId, newCategory);
 };
 
@@ -110,38 +165,34 @@ const handleDeleteTask = (id: string) => {
 const handleEditTask = (id: string) => {
   const task = tasks.value.find(t => t.id === id);
   if (task) {
-    const newTitle = prompt("Update task title:", task.title);
-    if (newTitle === null) {
-      return;
-    }
-
-    // Handle Subtasks Edit
-    const currentSubtasksStr = task.subtasks?.map(s => s.title).join(', ') || '';
-    const newSubtasksStr = prompt("Update subtasks (comma separated):", currentSubtasksStr);
-
-    let updatedSubtasks = task.subtasks || [];
-    if (newSubtasksStr !== null && newSubtasksStr !== currentSubtasksStr) {
-      // Simple reconstruction of subtasks if changed
-      updatedSubtasks = newSubtasksStr.split(',')
-        .map(s => s.trim())
-        .filter(Boolean)
-        .map(title => ({
-          id: Date.now().toString() + Math.random().toString(),
-          title,
-          is_completed: false
-        }));
-    }
-
-    if (newTitle.trim() !== "") {
-      updateTask(id, {
-        title: newTitle.trim(),
-        subtasks: updatedSubtasks
-      });
-    }
+    taskToEdit.value = task;
+    isEditModalOpen.value = true;
   }
 };
 
-const handleSaveNewTask = (title: string, subtaskTitles: string[]) => {
+const handleSaveEditedTask = (
+  taskId: string,
+  title: string,
+  subtasks: Subtask[],
+  category: CategoryId,
+  dueDate: string
+) => {
+  updateTask(taskId, {
+    title,
+    subtasks,
+    category,
+    due_date: dueDate
+  });
+  isEditModalOpen.value = false;
+  taskToEdit.value = null;
+};
+
+const handleCloseEditModal = () => {
+  isEditModalOpen.value = false;
+  taskToEdit.value = null;
+};
+
+const handleSaveNewTask = (title: string, subtaskTitles: string[], category: CategoryId, dueDate: string) => {
   const subtasks: Subtask[] = subtaskTitles.map(s => ({
     id: Date.now().toString() + Math.random().toString(),
     title: s,
@@ -151,9 +202,9 @@ const handleSaveNewTask = (title: string, subtaskTitles: string[]) => {
   createTask({
     title,
     is_completed: false,
-    category: Category.Personal, // Default
-    due_date: "No Due Date",
-    due_date_color: "text-slate-500",
+    category,
+    due_date: dueDate || 'No Due Date',
+    due_date_color: 'text-slate-500',
     subtasks
   });
 };
@@ -167,9 +218,6 @@ const clearFilters = () => {
 const hasActiveFilters = computed(() => {
   return categoryFilter.value || searchQuery.value || activeTab.value !== 'all';
 });
-
-// Category values for chips
-const categoryValues = Object.values(Category);
 </script>
 
 <template>
@@ -194,26 +242,33 @@ const categoryValues = Object.values(Category);
     />
 
     <main class="flex flex-1 justify-center py-6 px-4 md:px-8">
-      <div class="flex flex-col max-w-[800px] w-full gap-6">
+        <div class="flex flex-col max-w-[800px] w-full gap-6">
 
-        <!-- Heading & Summary -->
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-2">
-          <div class="flex flex-col gap-2">
-            <h1 class="text-3xl md:text-4xl font-black leading-tight tracking-[-0.033em] text-slate-900 dark:text-white">
-              Good Morning, {{ firstName }}
-            </h1>
-            <p class="text-slate-500 dark:text-[#92a4c9] text-base font-medium">
-              You have {{ activeCount }} active tasks today
-            </p>
+          <!-- Heading & Summary -->
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-2">
+            <div class="flex flex-col gap-3 w-full">
+              <div class="flex flex-col items-center text-center gap-2">
+                <span class="inline-flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-[#1e293b] px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+                  <span class="material-symbols-outlined text-[18px]">calendar_today</span>
+                  {{ currentDate }}
+                </span>
+                <h1 class="text-2xl md:text-3xl font-black leading-tight tracking-[-0.033em] text-slate-900 dark:text-white">
+                  {{ greetingMessage }}, {{ firstName }}
+                </h1>
+                <p class="text-slate-500 dark:text-[#92a4c9] text-base font-medium">
+                  You have {{ activeCount }} active tasks today
+                </p>
+              </div>
+            </div>
+            <button
+              @click="isAddModalOpen = true"
+              class="hidden md:flex items-center justify-center gap-2 overflow-hidden rounded-xl h-12 px-6 bg-primary hover:bg-primary/90 transition-all active:scale-95 text-white text-base font-bold shadow-lg shadow-primary/20"
+            >
+              <span class="material-symbols-outlined text-[20px]">add</span>
+              <span class="truncate">Add New Task</span>
+            </button>
           </div>
-          <button
-            @click="isAddModalOpen = true"
-            class="hidden md:flex items-center justify-center gap-2 overflow-hidden rounded-xl h-12 px-6 bg-primary hover:bg-primary/90 transition-all active:scale-95 text-white text-base font-bold shadow-lg shadow-primary/20"
-          >
-            <span class="material-symbols-outlined text-[20px]">add</span>
-            <span class="truncate">Add New Task</span>
-          </button>
-        </div>
+
 
         <!-- Mobile FAB (Floating Action Button) -->
         <button
@@ -274,38 +329,48 @@ const categoryValues = Object.values(Category);
           </div>
 
           <!-- Chips (Categories) -->
-          <div class="flex gap-3 flex-wrap items-center">
-            <span class="text-xs font-semibold uppercase text-slate-400 dark:text-slate-500 tracking-wider mr-1">
-              Filter by:
-            </span>
-
-            <button
-              v-for="cat in categoryValues"
-              :key="cat"
-              @click="categoryFilter = categoryFilter === cat ? null : cat"
-              :class="[
-                'flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg pl-3 pr-2 transition-colors',
-                categoryFilter === cat
-                  ? 'bg-slate-200 dark:bg-[#2d3b55] text-slate-800 dark:text-white'
-                  : 'border border-slate-200 dark:border-[#232f48] hover:bg-slate-100 dark:hover:bg-[#1e293b] text-slate-500 dark:text-[#92a4c9]'
-              ]"
-            >
-              <p class="text-sm font-medium leading-normal">{{ cat }}</p>
-              <span
-                v-if="categoryFilter === cat"
-                class="material-symbols-outlined text-slate-500 dark:text-slate-400 text-[18px]"
-              >
-                close
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold uppercase text-slate-400 dark:text-slate-500 tracking-wider">
+                Filter by:
               </span>
-            </button>
+              <button
+                @click="isCategoryManagerOpen = true"
+                class="text-xs text-primary hover:underline font-medium"
+              >
+                Manage
+              </button>
+            </div>
+            <div class="flex gap-3 flex-wrap items-center">
+              <button
+                v-for="cat in categories"
+                :key="cat.id"
+                @click="categoryFilter = categoryFilter === cat.id ? null : cat.id"
+                :class="[
+                  'flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg pl-3 pr-2 transition-colors',
+                  categoryFilter === cat.id
+                    ? 'bg-slate-200 dark:bg-[#2d3b55] text-slate-800 dark:text-white'
+                    : 'border border-slate-200 dark:border-[#232f48] hover:bg-slate-100 dark:hover:bg-[#1e293b] text-slate-500 dark:text-[#92a4c9]'
+                ]"
+              >
+                <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: cat.color }"></span>
+                <p class="text-sm font-medium leading-normal">{{ cat.name }}</p>
+                <span
+                  v-if="categoryFilter === cat.id"
+                  class="material-symbols-outlined text-slate-500 dark:text-slate-400 text-[18px]"
+                >
+                  close
+                </span>
+              </button>
 
-            <button
-              v-if="hasActiveFilters"
-              @click="clearFilters"
-              class="ml-auto text-primary text-sm font-medium hover:underline hidden sm:block"
-            >
-              Clear all
-            </button>
+              <button
+                v-if="hasActiveFilters"
+                @click="clearFilters"
+                class="ml-auto text-primary text-sm font-medium hover:underline hidden sm:block"
+              >
+                Clear all
+              </button>
+            </div>
           </div>
         </div>
 
@@ -321,6 +386,7 @@ const categoryValues = Object.values(Category);
             v-for="task in filteredTasks"
             :key="task.id"
             :task="task"
+            :categories="categories"
             @toggle="handleToggleTask(task.id)"
             @toggle-subtask="handleToggleSubtask"
             @delete="handleDeleteTask(task.id)"
@@ -336,8 +402,40 @@ const categoryValues = Object.values(Category);
 
     <AddTaskModal
       :is-open="isAddModalOpen"
+      :categories="categories"
       @close="isAddModalOpen = false"
       @save="handleSaveNewTask"
+    />
+
+    <EditTaskModal
+      :is-open="isEditModalOpen"
+      :task="taskToEdit"
+      :categories="categories"
+      @close="handleCloseEditModal"
+      @save="handleSaveEditedTask"
+    />
+
+    <CategoryManagerModal
+      :is-open="isCategoryManagerOpen"
+      :categories="categories"
+      :tasks="tasks"
+      @close="isCategoryManagerOpen = false"
+      @update-category="(id, updates) => updateCategoryFn(id, updates)"
+      @create-category="(name, color) => createCategory(name, color)"
+      @delete-category="(id) => deleteCategoryFn(id)"
+    />
+
+    <!-- Subtask Delete Confirmation Modal -->
+    <ConfirmModal
+      :is-open="showSubtaskDeleteConfirm"
+      title="Delete Subtask"
+      :message="`Are you sure you want to delete '${subtaskToDelete?.title}'?`"
+      confirm-text="Delete"
+      cancel-text="Cancel"
+      variant="danger"
+      icon="delete"
+      @confirm="handleConfirmSubtaskDelete"
+      @cancel="showSubtaskDeleteConfirm = false"
     />
   </template>
 </template>

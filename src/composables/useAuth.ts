@@ -1,12 +1,14 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { supabase } from '../services/supabase';
 import type { User } from '@supabase/supabase-js';
+import type { ThemeName } from '../types';
 
 export interface AuthUser {
   id: string;
   email: string;
   name: string;
   avatar: string;
+  theme?: ThemeName;
 }
 
 export function useAuth() {
@@ -20,7 +22,8 @@ export function useAuth() {
       id: supabaseUser.id,
       email: supabaseUser.email || '',
       name: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || supabaseUser.email || 'User',
-      avatar: supabaseUser.user_metadata?.avatar_url || supabaseUser.user_metadata?.picture || ''
+      avatar: supabaseUser.user_metadata?.avatar_url || supabaseUser.user_metadata?.picture || '',
+      theme: supabaseUser.user_metadata?.theme
     };
   };
 

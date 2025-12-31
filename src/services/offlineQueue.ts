@@ -1,16 +1,7 @@
-import { Task } from '../types';
+import type { Task, QueuedOperation } from '../types';
 
 const TASKS_CACHE_KEY = 'taskmaster_tasks_cache';
 const QUEUE_KEY = 'taskmaster_offline_queue';
-
-export interface QueuedOperation {
-  id: string;
-  type: 'create' | 'update' | 'delete';
-  recordId?: string;
-  data?: Partial<Task>;
-  tempId?: string; // For create operations, to map temp ID to real ID
-  timestamp: number;
-}
 
 // Task Cache Operations
 export function getCachedTasks(): Task[] {

@@ -20,9 +20,17 @@ export interface Task {
   isCompleted: boolean;
   category: Category;
   dueDate: string;
-  // This helps us style specific dates like "Today" vs generic dates
-  dueDateColor?: string; 
+  dueDateColor?: string;
   dueDateBg?: string;
   dueDateIcon?: string;
   subtasks?: Subtask[];
+}
+
+export interface QueuedOperation {
+  id: string;
+  type: 'create' | 'update' | 'delete';
+  recordId?: string;
+  data?: Partial<Task>;
+  tempId?: string;
+  timestamp: number;
 }

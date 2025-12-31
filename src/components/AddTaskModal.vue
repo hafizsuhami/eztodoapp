@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, watch, computed, nextTick } from 'vue';
 import type { CategoryOption, CategoryId, Subtask } from '../types';
+import { generateSubtasks as generateSubtasksAI, isAIEnabled } from '../services/gemini';
 
 const props = defineProps<{
   isOpen: boolean;
@@ -18,6 +19,8 @@ const newSubtaskTitle = ref('');
 const selectedCategory = ref<CategoryId>('');
 const dueDate = ref('');
 const isListening = ref(false);
+const isGeneratingSubtasks = ref(false);
+const aiError = ref('');
 const modalRef = ref<HTMLDivElement | null>(null);
 const titleInputRef = ref<HTMLInputElement | null>(null);
 let recognition: any = null;
@@ -144,6 +147,28 @@ const handleAddSubtaskKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Enter') {
     e.preventDefault();
     addSubtask();
+  }
+};
+
+// AI Subtask Generation
+const handleGenerateSubtasks = async () => {
+  if (!title.value.trim() || isGeneratingSubtasks.value) return;
+  
+  isGeneratingSubtasks.value = true;
+  aiError.value = '';
+  
+  try {
+    const generated = await generateSubtasksAI(title.value);
+    const newSubtasks: Subtask[] = generated.map(item => ({
+      id: Date.now().toString() + Math.random().toString(),
+      title: item.title,
+      is_completed: false
+    }));
+    subtasks.value = [...subtasks.value, ...newSubtasks];
+  } catch (error) {
+    aiError.value = error instanceof Error ? error.message : 'Failed to generate subtasks';
+  } finally {
+    isGeneratingSubtasks.value = false;
   }
 };
 
@@ -293,6 +318,30 @@ const handleSubmit = () => {
                 <span class="material-symbols-outlined text-[20px]">add</span>
               </button>
             </div>
+
+            <!-- AI Generate Subtasks Button -->
+            <button
+              v-if="isAIEnabled()"
+              type="button"
+              @click="handleGenerateSubtasks"
+              :disabled="!title.trim() || isGeneratingSubtasks"
+              :class="[
+                'flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-medium transition-all',
+                isGeneratingSubtasks
+                  ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 cursor-wait'
+                  : 'bg-gradient-to-r from-purple-500/10 to-pink-500/10 text-purple-600 dark:text-purple-400 hover:from-purple-500/20 hover:to-pink-500/20 disabled:opacity-50 disabled:cursor-not-allowed'
+              ]"
+              :aria-busy="isGeneratingSubtasks"
+            >
+              <span 
+                :class="['material-symbols-outlined text-[18px]', isGeneratingSubtasks ? 'animate-spin' : '']"
+                aria-hidden="true"
+              >
+                {{ isGeneratingSubtasks ? 'progress_activity' : 'auto_awesome' }}
+              </span>
+              {{ isGeneratingSubtasks ? 'Generating...' : 'Generate subtasks with AI' }}
+            </button>
+            <p v-if="aiError" class="text-xs text-red-500 mt-1">{{ aiError }}</p>
           </div>
 
           <div class="flex flex-col gap-1.5">

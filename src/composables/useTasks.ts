@@ -1,6 +1,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue';
-import { pb } from '../services/pocketbase';
+import { supabase } from '../services/supabase';
 import type { Task, Category, Subtask } from '../types';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import {
   getCachedTasks,
   setCachedTasks,
@@ -25,12 +26,16 @@ export function useTasks(userId: () => string | undefined) {
     
     try {
       syncStatus.value = 'syncing';
-      const records = await pb.collection('tasks').getFullList<Task>({
-        filter: `user = "${id}"`,
-        sort: '-created'
-      });
-      tasks.value = records;
-      setCachedTasks(records);
+      const { data, error: fetchError } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', id)
+        .order('created_at', { ascending: false });
+
+      if (fetchError) throw fetchError;
+      
+      tasks.value = data || [];
+      setCachedTasks(tasks.value);
       syncStatus.value = 'synced';
       error.value = null;
     } catch (e) {
@@ -62,20 +67,29 @@ export function useTasks(userId: () => string | undefined) {
     for (const op of queue) {
       try {
         if (op.type === 'create' && op.data) {
-          await pb.collection('tasks').create({
-            ...op.data,
-            user: id
-          });
+          await supabase
+            .from('tasks')
+            .insert({
+              ...op.data,
+              user_id: id,
+              id: undefined // Let Supabase generate the ID
+            });
         } else if (op.type === 'update' && op.recordId && op.data) {
-          await pb.collection('tasks').update(op.recordId, op.data);
+          await supabase
+            .from('tasks')
+            .update(op.data)
+            .eq('id', op.recordId);
         } else if (op.type === 'delete' && op.recordId) {
-          await pb.collection('tasks').delete(op.recordId);
+          await supabase
+            .from('tasks')
+            .delete()
+            .eq('id', op.recordId);
         }
         removeFromQueue(op.id);
       } catch (e) {
         console.error('Failed to process queue operation:', e);
         // If record not found, remove from queue
-        if ((e as Record<string, unknown>)?.status === 404) {
+        if ((e as Record<string, unknown>)?.code === 'PGRST116') {
           removeFromQueue(op.id);
         }
       }
@@ -86,7 +100,7 @@ export function useTasks(userId: () => string | undefined) {
   };
 
   // CRUD Operations
-  const createTask = async (data: Omit<Task, 'id' | 'user'>) => {
+  const createTask = async (data: Omit<Task, 'id' | 'user_id'>) => {
     const id = userId();
     if (!id) return;
 
@@ -94,7 +108,7 @@ export function useTasks(userId: () => string | undefined) {
     const newTask: Task = {
       ...data,
       id: tempId,
-      user: id
+      user_id: id
     };
 
     // Optimistic update
@@ -103,10 +117,24 @@ export function useTasks(userId: () => string | undefined) {
 
     if (isOnline()) {
       try {
-        const created = await pb.collection('tasks').create<Task>({
-          ...data,
-          user: id
-        });
+        const { data: created, error: createError } = await supabase
+          .from('tasks')
+          .insert({
+            user_id: id,
+            title: data.title,
+            is_completed: data.is_completed,
+            category: data.category,
+            due_date: data.due_date,
+            due_date_color: data.due_date_color,
+            due_date_bg: data.due_date_bg,
+            due_date_icon: data.due_date_icon,
+            subtasks: data.subtasks || []
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        
         // Replace temp task with real one
         tasks.value = tasks.value.map(t => t.id === tempId ? created : t);
         setCachedTasks(tasks.value);
@@ -128,7 +156,12 @@ export function useTasks(userId: () => string | undefined) {
 
     if (isOnline() && !taskId.startsWith('temp_')) {
       try {
-        await pb.collection('tasks').update(taskId, data);
+        const { error: updateError } = await supabase
+          .from('tasks')
+          .update(data)
+          .eq('id', taskId);
+        
+        if (updateError) throw updateError;
       } catch (e) {
         console.error('Failed to update task:', e);
         addToQueue({ type: 'update', recordId: taskId, data });
@@ -146,7 +179,12 @@ export function useTasks(userId: () => string | undefined) {
 
     if (isOnline() && !taskId.startsWith('temp_')) {
       try {
-        await pb.collection('tasks').delete(taskId);
+        const { error: deleteError } = await supabase
+          .from('tasks')
+          .delete()
+          .eq('id', taskId);
+        
+        if (deleteError) throw deleteError;
       } catch (e) {
         console.error('Failed to delete task:', e);
         addToQueue({ type: 'delete', recordId: taskId });
@@ -158,8 +196,8 @@ export function useTasks(userId: () => string | undefined) {
   };
 
   // Convenience methods
-  const toggleTask = (taskId: string, isCompleted: boolean) => {
-    return updateTask(taskId, { isCompleted: !isCompleted });
+  const toggleTask = (taskId: string, is_completed: boolean) => {
+    return updateTask(taskId, { is_completed: !is_completed });
   };
 
   const updateTaskCategory = (taskId: string, category: Category) => {
@@ -181,27 +219,38 @@ export function useTasks(userId: () => string | undefined) {
   };
 
   // Setup real-time subscription
-  let subscribed = false;
+  let channel: RealtimeChannel | null = null;
 
   const setupSubscription = (id: string) => {
-    if (subscribed || !isOnline()) return;
+    if (channel || !isOnline()) return;
     
-    pb.collection('tasks').subscribe('*', (e) => {
-      // Only handle events for current user's tasks
-      if (e.record.user !== id) return;
-
-      if (e.action === 'create') {
-        tasks.value = [e.record as unknown as Task, ...tasks.value.filter(t => t.id !== e.record.id)];
-        setCachedTasks(tasks.value);
-      } else if (e.action === 'update') {
-        tasks.value = tasks.value.map(t => t.id === e.record.id ? e.record as unknown as Task : t);
-        setCachedTasks(tasks.value);
-      } else if (e.action === 'delete') {
-        tasks.value = tasks.value.filter(t => t.id !== e.record.id);
-        setCachedTasks(tasks.value);
-      }
-    });
-    subscribed = true;
+    channel = supabase
+      .channel('tasks-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks',
+          filter: `user_id=eq.${id}`
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newTask = payload.new as Task;
+            tasks.value = [newTask, ...tasks.value.filter(t => t.id !== newTask.id)];
+            setCachedTasks(tasks.value);
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedTask = payload.new as Task;
+            tasks.value = tasks.value.map(t => t.id === updatedTask.id ? updatedTask : t);
+            setCachedTasks(tasks.value);
+          } else if (payload.eventType === 'DELETE') {
+            const deletedTask = payload.old as { id: string };
+            tasks.value = tasks.value.filter(t => t.id !== deletedTask.id);
+            setCachedTasks(tasks.value);
+          }
+        }
+      )
+      .subscribe();
   };
 
   // Watch for userId changes
@@ -232,7 +281,9 @@ export function useTasks(userId: () => string | undefined) {
   onUnmounted(() => {
     window.removeEventListener('online', handleOnline);
     window.removeEventListener('offline', handleOffline);
-    pb.collection('tasks').unsubscribe();
+    if (channel) {
+      supabase.removeChannel(channel);
+    }
   });
 
   return {

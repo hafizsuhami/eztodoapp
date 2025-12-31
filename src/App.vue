@@ -32,13 +32,13 @@ const categoryFilter = ref<Category | null>(null);
 const isAddModalOpen = ref(false);
 
 // Computed values
-const activeCount = computed(() => tasks.value.filter(t => !t.isCompleted).length);
+const activeCount = computed(() => tasks.value.filter(t => !t.is_completed).length);
 
 const filteredTasks = computed(() => {
   return tasks.value.filter(task => {
     // 1. Status Filter
-    if (activeTab.value === 'active' && task.isCompleted) return false;
-    if (activeTab.value === 'completed' && !task.isCompleted) return false;
+    if (activeTab.value === 'active' && task.is_completed) return false;
+    if (activeTab.value === 'completed' && !task.is_completed) return false;
 
     // 2. Category Filter
     if (categoryFilter.value && task.category !== categoryFilter.value) return false;
@@ -65,7 +65,7 @@ const tabOptions: TaskStatus[] = ['all', 'active', 'completed'];
 const handleToggleTask = (id: string) => {
   const task = tasks.value.find(t => t.id === id);
   if (task) {
-    toggleTask(id, task.isCompleted);
+    toggleTask(id, task.is_completed);
   }
 };
 
@@ -73,7 +73,7 @@ const handleToggleSubtask = (taskId: string, subtaskId: string) => {
   const task = tasks.value.find(t => t.id === taskId);
   if (task && task.subtasks) {
     const updatedSubtasks = task.subtasks.map(s =>
-      s.id === subtaskId ? { ...s, isCompleted: !s.isCompleted } : s
+      s.id === subtaskId ? { ...s, is_completed: !s.is_completed } : s
     );
     updateSubtasks(taskId, updatedSubtasks);
   }
@@ -128,7 +128,7 @@ const handleEditTask = (id: string) => {
         .map(title => ({
           id: Date.now().toString() + Math.random().toString(),
           title,
-          isCompleted: false
+          is_completed: false
         }));
     }
 
@@ -145,15 +145,15 @@ const handleSaveNewTask = (title: string, subtaskTitles: string[]) => {
   const subtasks: Subtask[] = subtaskTitles.map(s => ({
     id: Date.now().toString() + Math.random().toString(),
     title: s,
-    isCompleted: false
+    is_completed: false
   }));
 
   createTask({
     title,
-    isCompleted: false,
+    is_completed: false,
     category: Category.Personal, // Default
-    dueDate: "No Due Date",
-    dueDateColor: "text-slate-500",
+    due_date: "No Due Date",
+    due_date_color: "text-slate-500",
     subtasks
   });
 };

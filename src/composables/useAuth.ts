@@ -1,6 +1,6 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { pb } from '../services/pocketbase';
-import type { RecordModel } from 'pocketbase';
+import { supabase } from '../services/supabase';
+import type { User } from '@supabase/supabase-js';
 
 export interface AuthUser {
   id: string;
@@ -13,37 +13,29 @@ export function useAuth() {
   const user = ref<AuthUser | null>(null);
   const loading = ref(true);
 
-  // Extract user info from PocketBase auth record
-  const extractUser = (record: RecordModel | null): AuthUser | null => {
-    if (!record) return null;
+  // Extract user info from Supabase user
+  const extractUser = (supabaseUser: User | null): AuthUser | null => {
+    if (!supabaseUser) return null;
     return {
-      id: record.id,
-      email: record.email || '',
-      name: record.name || record.email || 'User',
-      avatar: record.avatar 
-        ? pb.files.getURL(record, record.avatar)
-        : ''
+      id: supabaseUser.id,
+      email: supabaseUser.email || '',
+      name: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || supabaseUser.email || 'User',
+      avatar: supabaseUser.user_metadata?.avatar_url || supabaseUser.user_metadata?.picture || ''
     };
   };
 
   const isAuthenticated = computed(() => !!user.value);
 
-  // Silent refresh - try to refresh token if expired
-  const refreshAuth = async () => {
-    if (pb.authStore.isValid) {
-      try {
-        await pb.collection('users').authRefresh();
-      } catch {
-        // Token refresh failed, clear auth
-        pb.authStore.clear();
-      }
-    }
-  };
-
   const loginWithGoogle = async () => {
     try {
       loading.value = true;
-      await pb.collection('users').authWithOAuth2({ provider: 'google' });
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
     } catch (error) {
       console.error('Google login failed:', error);
       throw error;
@@ -52,37 +44,30 @@ export function useAuth() {
     }
   };
 
-  const logout = () => {
-    pb.authStore.clear();
+  const logout = async () => {
+    await supabase.auth.signOut();
     user.value = null;
   };
 
-  let unsubscribe: (() => void) | null = null;
-  let refreshInterval: ReturnType<typeof setInterval> | null = null;
+  let unsubscribe: { data: { subscription: { unsubscribe: () => void } } } | null = null;
 
-  onMounted(() => {
+  onMounted(async () => {
     // Initial auth check
-    if (pb.authStore.isValid && pb.authStore.record) {
-      user.value = extractUser(pb.authStore.record);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      user.value = extractUser(session.user);
     }
     loading.value = false;
 
     // Listen for auth state changes
-    unsubscribe = pb.authStore.onChange((_token, record) => {
-      user.value = extractUser(record);
+    unsubscribe = supabase.auth.onAuthStateChange((_event, session) => {
+      user.value = extractUser(session?.user ?? null);
     });
-
-    // Refresh token on mount and every 10 minutes
-    refreshAuth();
-    refreshInterval = setInterval(refreshAuth, 10 * 60 * 1000);
   });
 
   onUnmounted(() => {
     if (unsubscribe) {
-      unsubscribe();
-    }
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
+      unsubscribe.data.subscription.unsubscribe();
     }
   });
 

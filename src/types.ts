@@ -10,20 +10,22 @@ export type TaskStatus = 'all' | 'active' | 'completed';
 export interface Subtask {
   id: string;
   title: string;
-  isCompleted: boolean;
+  is_completed: boolean;
 }
 
 export interface Task {
   id: string;
-  user: string;
+  user_id: string;
   title: string;
-  isCompleted: boolean;
+  is_completed: boolean;
   category: Category;
-  dueDate: string;
-  dueDateColor?: string;
-  dueDateBg?: string;
-  dueDateIcon?: string;
+  due_date: string;
+  due_date_color?: string;
+  due_date_bg?: string;
+  due_date_icon?: string;
   subtasks?: Subtask[];
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface QueuedOperation {

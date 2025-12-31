@@ -3,7 +3,9 @@ import type { AuthUser } from '../composables/useAuth';
 import type { SyncStatus } from '../composables/useTasks';
 import SyncIndicator from './SyncIndicator.vue';
 
-defineProps<{
+import { useTheme } from '../composables/useTheme';
+
+const props = defineProps<{
   user?: AuthUser | null;
   syncStatus?: SyncStatus;
 }>();
@@ -11,6 +13,8 @@ defineProps<{
 const emit = defineEmits<{
   logout: [];
 }>();
+
+const { isDark, toggleTheme } = useTheme();
 </script>
 
 <template>
@@ -19,11 +23,22 @@ const emit = defineEmits<{
       <div class="size-8 flex items-center justify-center bg-primary/10 rounded-lg text-primary">
         <span class="material-symbols-outlined">check_circle</span>
       </div>
-      <h2 class="text-lg font-bold leading-tight tracking-[-0.015em]">TaskMaster</h2>
+      <h2 class="text-lg font-bold leading-tight tracking-[-0.015em]">EZtodo</h2>
     </div>
     <div class="flex flex-1 justify-end items-center gap-4">
       <!-- Sync Status Indicator -->
       <SyncIndicator :status="syncStatus || 'synced'" />
+
+      <!-- Theme Toggle -->
+      <button 
+        @click="toggleTheme"
+        class="flex items-center justify-center size-9 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+      >
+        <span class="material-symbols-outlined text-[20px]">
+          {{ isDark ? 'light_mode' : 'dark_mode' }}
+        </span>
+      </button>
 
       <!-- User Profile -->
       <div v-if="user" class="flex items-center gap-3">

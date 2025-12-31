@@ -14,6 +14,9 @@ dist-ssr
 *.tsbuildinfo
 vite.config.d.ts
 
+# PocketBase
+pocketbase/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

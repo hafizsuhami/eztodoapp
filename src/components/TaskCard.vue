@@ -53,7 +53,7 @@ const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
   <div 
     :class="[
       'group flex flex-col sm:flex-row sm:items-start p-4 rounded-xl border transition-all duration-200 ease-in-out',
-      task.isCompleted 
+      task.is_completed 
         ? 'bg-slate-50 dark:bg-[#161f30] border-transparent hover:border-slate-300 dark:hover:border-slate-700 opacity-70 hover:opacity-100' 
         : `bg-white dark:bg-[#1e293b] border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-lg hover:border-primary/30 hover:scale-[1.01] ${isCategoryOpen ? 'z-20' : 'hover:z-10'}`
     ]"
@@ -63,12 +63,12 @@ const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
       <label class="relative flex items-center p-0 mt-1 cursor-pointer shrink-0">
         <input 
           type="checkbox" 
-          :checked="task.isCompleted"
+          :checked="task.is_completed"
           @change="emit('toggle')"
           class="custom-checkbox peer sr-only" 
         />
         <div class="size-6 border-2 border-slate-300 dark:border-slate-500 rounded-md bg-transparent flex items-center justify-center transition-colors hover:border-primary">
-          <svg v-if="task.isCompleted" class="w-4 h-4 text-primary" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+          <svg v-if="task.is_completed" class="w-4 h-4 text-primary" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
             <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path>
           </svg>
         </div>
@@ -78,7 +78,7 @@ const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
         <div class="flex flex-wrap justify-between gap-2">
           <span :class="[
             'text-base font-semibold transition-colors decoration-2 truncate pr-2',
-            task.isCompleted 
+            task.is_completed 
               ? 'line-through text-slate-500 dark:text-slate-400' 
               : 'text-slate-900 dark:text-white'
           ]">
@@ -102,15 +102,15 @@ const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
             <label class="relative flex items-center p-0 cursor-pointer shrink-0">
                 <input
                     type="checkbox"
-                    :checked="subtask.isCompleted"
+                    :checked="subtask.is_completed"
                     @change="emit('toggleSubtask', task.id, subtask.id)"
                     class="custom-checkbox peer sr-only"
                 />
                 <div :class="[
                   'size-4 border-2 rounded bg-transparent flex items-center justify-center transition-colors hover:border-primary',
-                  subtask.isCompleted ? 'bg-primary border-primary' : 'border-slate-300 dark:border-slate-600'
+                  subtask.is_completed ? 'bg-primary border-primary' : 'border-slate-300 dark:border-slate-600'
                 ]">
-                    <svg v-if="subtask.isCompleted" class="w-3 h-3 text-white" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+                    <svg v-if="subtask.is_completed" class="w-3 h-3 text-white" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
                         <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path>
                     </svg>
                 </div>
@@ -121,7 +121,7 @@ const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
               @input="handleSubtaskTitleChange(subtask.id, $event)"
               :class="[
                 'flex-1 min-w-0 text-sm leading-tight bg-transparent border-none p-0 focus:ring-0 focus:outline-none cursor-text transition-colors',
-                subtask.isCompleted 
+                subtask.is_completed 
                 ? 'line-through text-slate-400 dark:text-slate-500' 
                 : 'text-slate-600 dark:text-slate-300'
               ]"
@@ -138,9 +138,9 @@ const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
 
         <div class="flex flex-wrap items-center gap-3 text-xs mt-1">
           <!-- Due Date Badge -->
-          <span :class="['flex items-center gap-1 font-medium px-2 py-0.5 rounded', task.dueDateBg || '', task.dueDateColor || 'text-slate-500']">
-            <span class="material-symbols-outlined text-[14px]">{{ task.dueDateIcon || 'calendar_today' }}</span>
-            {{ task.dueDate }}
+          <span :class="['flex items-center gap-1 font-medium px-2 py-0.5 rounded', task.due_date_bg || '', task.due_date_color || 'text-slate-500']">
+            <span class="material-symbols-outlined text-[14px]">{{ task.due_date_icon || 'calendar_today' }}</span>
+            {{ task.due_date }}
           </span>
 
           <!-- Category Badge -->
@@ -149,11 +149,11 @@ const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
               @click="isCategoryOpen = !isCategoryOpen"
               :class="[
                 'flex items-center gap-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded px-1.5 py-0.5 -ml-1.5 transition-colors',
-                task.isCompleted ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'
+                task.is_completed ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'
               ]"
               title="Change Category"
             >
-              <span :class="['size-2 rounded-full', categoryColor, task.isCompleted ? 'opacity-50' : '']"></span>
+              <span :class="['size-2 rounded-full', categoryColor, task.is_completed ? 'opacity-50' : '']"></span>
               {{ task.category }}
             </button>
 
@@ -179,7 +179,7 @@ const handleSubtaskTitleChange = (subtaskId: string, event: Event) => {
           <!-- Subtask count badge -->
           <span v-if="task.subtasks && task.subtasks.length > 0" class="flex items-center gap-1 text-slate-400">
              <span class="material-symbols-outlined text-[14px]">checklist</span>
-             {{ task.subtasks.filter(s => s.isCompleted).length }}/{{ task.subtasks.length }}
+             {{ task.subtasks.filter(s => s.is_completed).length }}/{{ task.subtasks.length }}
           </span>
         </div>
       </div>

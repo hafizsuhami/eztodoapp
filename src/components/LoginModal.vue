@@ -36,7 +36,7 @@ const handleLogin = async () => {
         <!-- Title -->
         <div class="text-center">
           <h1 class="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-            Welcome to TaskMaster
+            Welcome to EZtodo
           </h1>
           <p class="text-slate-500 dark:text-slate-400 text-sm">
             Sign in to sync your tasks across all devices

@@ -1,0 +1,7 @@
+{
+  "name": "TaskMaster",
+  "description": "A sleek, dark-themed task management dashboard designed for productivity with filtering and categorization features.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

@@ -5,6 +5,7 @@ import TaskCard from './components/TaskCard.vue';
 import AddTaskModal from './components/AddTaskModal.vue';
 import EditTaskModal from './components/EditTaskModal.vue';
 import LoginModal from './components/LoginModal.vue';
+import LandingPage from './components/LandingPage.vue';
 import CategoryManagerModal from './components/CategoryManagerModal.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
 import ToastContainer from './components/ToastContainer.vue';
@@ -360,15 +361,15 @@ const getCategoryTaskCount = (catId: string) => {
     </div>
   </div>
 
-  <!-- Main App -->
+  <!-- Landing Page for non-authenticated users -->
+  <LandingPage 
+    v-else-if="!isAuthenticated" 
+    @get-started="loginWithGoogle" 
+  />
+
+  <!-- Main App for authenticated users -->
   <template v-else>
     <Header :user="user" :sync-status="syncStatus" @logout="logout" />
-
-    <!-- Login Modal -->
-    <LoginModal
-      :is-open="!isAuthenticated"
-      @login="loginWithGoogle"
-    />
 
     <main class="flex flex-1 justify-center py-6 px-4 md:px-8">
         <div class="flex flex-col max-w-[800px] w-full gap-6">

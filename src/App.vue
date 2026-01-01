@@ -46,7 +46,7 @@ const {
 } = useCategories(getUserId);
 
 // Local state
-const activeTab = ref<TaskStatus>('active');
+const activeTab = ref<TaskStatus>('today');
 const searchQuery = ref('');
 const categoryFilter = ref<CategoryId | null>(null);
 const isAddModalOpen = ref(false);
@@ -68,15 +68,59 @@ const subtaskToDelete = ref<{ taskId: string; subtaskId: string; title: string }
 // Recently deleted task for undo
 const recentlyDeletedTask = ref<Task | null>(null);
 
+// Date helpers
+const getStartOfDay = (date: Date) => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const isToday = (dateStr: string) => {
+  if (!dateStr || dateStr === 'No Due Date') return false;
+  const taskDate = getStartOfDay(new Date(dateStr));
+  const today = getStartOfDay(new Date());
+  return taskDate.getTime() === today.getTime();
+};
+
+const isUpcoming = (dateStr: string) => {
+  if (!dateStr || dateStr === 'No Due Date') return false;
+  const taskDate = getStartOfDay(new Date(dateStr));
+  const today = getStartOfDay(new Date());
+  const nextWeek = new Date(today);
+  nextWeek.setDate(nextWeek.getDate() + 7);
+  return taskDate.getTime() > today.getTime() && taskDate.getTime() <= nextWeek.getTime();
+};
+
+const isOverdue = (dateStr: string) => {
+  if (!dateStr || dateStr === 'No Due Date') return false;
+  const taskDate = getStartOfDay(new Date(dateStr));
+  const today = getStartOfDay(new Date());
+  return taskDate.getTime() < today.getTime();
+};
+
 // Computed values
 const activeCount = computed(() => tasks.value.filter(t => !t.is_completed).length);
 const completedCount = computed(() => tasks.value.filter(t => t.is_completed).length);
+const todayCount = computed(() => tasks.value.filter(t => !t.is_completed && (isToday(t.due_date) || isOverdue(t.due_date))).length);
+const upcomingCount = computed(() => tasks.value.filter(t => !t.is_completed && isUpcoming(t.due_date)).length);
 
 const filteredTasks = computed(() => {
   return tasks.value.filter(task => {
     // 1. Status Filter
-    if (activeTab.value === 'active' && task.is_completed) return false;
-    if (activeTab.value === 'completed' && !task.is_completed) return false;
+    if (activeTab.value === 'today') {
+      // Show overdue + today's tasks (not completed)
+      if (task.is_completed) return false;
+      if (!isToday(task.due_date) && !isOverdue(task.due_date)) return false;
+    } else if (activeTab.value === 'upcoming') {
+      // Show next 7 days (not completed, not today)
+      if (task.is_completed) return false;
+      if (!isUpcoming(task.due_date)) return false;
+    } else if (activeTab.value === 'all') {
+      // Show all incomplete tasks
+      if (task.is_completed) return false;
+    } else if (activeTab.value === 'completed') {
+      if (!task.is_completed) return false;
+    }
 
     // 2. Category Filter
     if (categoryFilter.value && task.category !== categoryFilter.value) return false;
@@ -93,6 +137,52 @@ const filteredTasks = computed(() => {
 
     return true;
   });
+});
+
+// Group tasks by date section for better organization
+const groupedTasks = computed(() => {
+  const groups: { label: string; icon: string; tasks: Task[]; color: string }[] = [];
+  
+  // Only group in 'all' and 'today' views
+  if (activeTab.value === 'completed' || searchQuery.value) {
+    // No grouping for completed or search results
+    return [{ label: '', icon: '', tasks: filteredTasks.value, color: '' }];
+  }
+  
+  const overdueTasks = filteredTasks.value.filter(t => isOverdue(t.due_date));
+  const todayTasks = filteredTasks.value.filter(t => isToday(t.due_date));
+  const upcomingTasks = filteredTasks.value.filter(t => isUpcoming(t.due_date));
+  const noDueTasks = filteredTasks.value.filter(t => !t.due_date || t.due_date === 'No Due Date');
+  const otherTasks = filteredTasks.value.filter(t => 
+    t.due_date && 
+    t.due_date !== 'No Due Date' && 
+    !isOverdue(t.due_date) && 
+    !isToday(t.due_date) && 
+    !isUpcoming(t.due_date)
+  );
+  
+  if (overdueTasks.length > 0) {
+    groups.push({ label: 'Overdue', icon: 'warning', tasks: overdueTasks, color: 'text-red-500' });
+  }
+  if (todayTasks.length > 0) {
+    groups.push({ label: 'Today', icon: 'today', tasks: todayTasks, color: 'text-amber-500' });
+  }
+  if (upcomingTasks.length > 0 && activeTab.value !== 'today') {
+    groups.push({ label: 'Upcoming', icon: 'event_upcoming', tasks: upcomingTasks, color: 'text-blue-500' });
+  }
+  if (otherTasks.length > 0 && activeTab.value === 'all') {
+    groups.push({ label: 'Later', icon: 'schedule', tasks: otherTasks, color: 'text-slate-400' });
+  }
+  if (noDueTasks.length > 0 && activeTab.value === 'all') {
+    groups.push({ label: 'No due date', icon: 'all_inbox', tasks: noDueTasks, color: 'text-slate-400' });
+  }
+  
+  // If no groups were created, return ungrouped
+  if (groups.length === 0) {
+    return [{ label: '', icon: '', tasks: filteredTasks.value, color: '' }];
+  }
+  
+  return groups;
 });
 
 // Greeting helpers
@@ -115,8 +205,23 @@ const currentDate = computed(() => {
 // Get user's first name for greeting
 const firstName = computed(() => user.value?.name?.split(' ')[0] || 'there');
 
-// Tab options
-const tabOptions: TaskStatus[] = ['all', 'active', 'completed'];
+// Tab options with icons and counts
+const tabOptions: { key: TaskStatus; label: string; shortLabel: string; icon: string }[] = [
+  { key: 'today', label: 'Today', shortLabel: 'Today', icon: 'today' },
+  { key: 'upcoming', label: 'Upcoming', shortLabel: 'Soon', icon: 'event_upcoming' },
+  { key: 'all', label: 'All', shortLabel: 'All', icon: 'list' },
+  { key: 'completed', label: 'Done', shortLabel: 'Done', icon: 'task_alt' }
+];
+
+const getTabCount = (tab: TaskStatus) => {
+  switch (tab) {
+    case 'today': return todayCount.value;
+    case 'upcoming': return upcomingCount.value;
+    case 'all': return activeCount.value;
+    case 'completed': return completedCount.value;
+    default: return 0;
+  }
+};
 
 // Keyboard shortcuts
 const handleGlobalKeydown = (event: KeyboardEvent) => {
@@ -335,11 +440,11 @@ const handleQuickAddKeydown = (event: KeyboardEvent) => {
 const clearFilters = () => {
   categoryFilter.value = null;
   searchQuery.value = '';
-  activeTab.value = 'all';
+  activeTab.value = 'today';
 };
 
 const hasActiveFilters = computed(() => {
-  return categoryFilter.value || searchQuery.value || activeTab.value !== 'all';
+  return categoryFilter.value || searchQuery.value || activeTab.value !== 'today';
 });
 
 // Category task counts for progress indicator
@@ -386,7 +491,12 @@ const getCategoryTaskCount = (catId: string) => {
                   {{ greetingMessage }}, {{ firstName }}
                 </h1>
                 <p class="text-slate-500 dark:text-[#92a4c9] text-base font-medium">
-                  You have {{ activeCount }} active task{{ activeCount !== 1 ? 's' : '' }} today
+                  <template v-if="todayCount > 0">
+                    You have {{ todayCount }} task{{ todayCount !== 1 ? 's' : '' }} for today
+                  </template>
+                  <template v-else>
+                    All clear for today! ✨
+                  </template>
                 </p>
               </div>
             </div>
@@ -461,21 +571,33 @@ const getCategoryTaskCount = (catId: string) => {
           <div class="flex flex-col sm:flex-row justify-between items-center border-b border-slate-200 dark:border-[#324467] gap-4">
 
             <!-- Tabs -->
-            <div class="flex w-full sm:w-auto overflow-x-auto no-scrollbar gap-8 px-2">
+            <div class="flex w-full sm:w-auto justify-between sm:justify-start gap-1 sm:gap-2 px-1">
               <button
                 v-for="tab in tabOptions"
-                :key="tab"
-                @click="activeTab = tab"
+                :key="tab.key"
+                @click="activeTab = tab.key"
                 :class="[
-                  'group flex flex-col items-center justify-center border-b-[3px] pb-3 transition-colors cursor-pointer min-w-[60px]',
-                  activeTab === tab
-                    ? 'border-b-primary text-primary dark:text-white'
-                    : 'border-b-transparent text-slate-500 dark:text-[#92a4c9] hover:text-primary'
+                  'group flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 rounded-lg transition-all cursor-pointer text-xs sm:text-sm font-medium whitespace-nowrap flex-1 sm:flex-none',
+                  activeTab === tab.key
+                    ? 'bg-primary text-white shadow-md shadow-primary/20'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'
                 ]"
+                :aria-label="tab.label"
               >
-                <p class="text-sm font-bold leading-normal tracking-[0.015em] capitalize">
-                  {{ tab }}
-                </p>
+                <span class="material-symbols-outlined text-[16px] sm:text-[18px]" aria-hidden="true">{{ tab.icon }}</span>
+                <span class="sm:hidden">{{ tab.shortLabel }}</span>
+                <span class="hidden sm:inline">{{ tab.label }}</span>
+                <span
+                  v-if="getTabCount(tab.key) > 0"
+                  :class="[
+                    'text-xs px-1 sm:px-1.5 py-0.5 rounded-full min-w-[18px] sm:min-w-[20px] text-center',
+                    activeTab === tab.key
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                  ]"
+                >
+                  {{ getTabCount(tab.key) }}
+                </span>
               </button>
             </div>
 
@@ -565,18 +687,25 @@ const getCategoryTaskCount = (catId: string) => {
           <div v-if="filteredTasks.length === 0 && !tasksLoading" class="flex flex-col items-center justify-center py-16 px-4">
             <div class="size-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
               <span class="material-symbols-outlined text-4xl text-slate-400 dark:text-slate-500" aria-hidden="true">
-                {{ hasActiveFilters ? 'filter_list_off' : (activeTab === 'completed' ? 'task_alt' : 'inbox') }}
+                {{ hasActiveFilters ? 'filter_list_off' : (activeTab === 'completed' ? 'celebration' : (activeTab === 'today' ? 'wb_sunny' : 'inbox')) }}
               </span>
             </div>
             <h3 class="text-lg font-semibold text-slate-700 dark:text-slate-200 mb-1">
-              {{ hasActiveFilters ? 'No matching tasks' : (activeTab === 'completed' ? 'No completed tasks yet' : 'No tasks yet') }}
+              {{ hasActiveFilters ? 'No matching tasks' : 
+                 (activeTab === 'completed' ? 'No completed tasks yet' : 
+                 (activeTab === 'today' ? 'All clear for today! 🎉' : 
+                 (activeTab === 'upcoming' ? 'Nothing coming up' : 'No tasks yet'))) }}
             </h3>
             <p class="text-sm text-slate-500 dark:text-slate-400 text-center max-w-xs mb-6">
               {{ hasActiveFilters 
                 ? 'Try adjusting your filters or search query' 
                 : (activeTab === 'completed' 
                     ? 'Complete some tasks and they\'ll appear here' 
-                    : 'Create your first task to get started') 
+                    : (activeTab === 'today'
+                        ? 'Enjoy your free time or add a new task'
+                        : (activeTab === 'upcoming'
+                            ? 'Tasks due in the next 7 days will show here'
+                            : 'Create your first task to get started')))
               }}
             </p>
             <div class="flex gap-3">
@@ -593,25 +722,38 @@ const getCategoryTaskCount = (catId: string) => {
                 class="px-6 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all flex items-center gap-2"
               >
                 <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
-                Create your first task
+                {{ activeTab === 'today' ? 'Add task for today' : 'Add new task' }}
               </button>
             </div>
           </div>
 
-          <TaskCard
-            v-else
-            v-for="task in filteredTasks"
-            :key="task.id"
-            :task="task"
-            :categories="categories"
-            @toggle="handleToggleTask(task.id)"
-            @toggle-subtask="handleToggleSubtask"
-            @delete="handleDeleteTask(task.id)"
-            @delete-subtask="handleDeleteSubtask"
-            @edit="handleEditTask"
-            @update-subtask-title="handleUpdateSubtaskTitle"
-            @update-category="handleUpdateTaskCategory"
-          />
+          <!-- Grouped Task List -->
+          <template v-else>
+            <div v-for="group in groupedTasks" :key="group.label" class="flex flex-col gap-3">
+              <!-- Section Header -->
+              <div v-if="group.label" class="flex items-center gap-2 pt-2">
+                <span :class="['material-symbols-outlined text-[18px]', group.color]" aria-hidden="true">{{ group.icon }}</span>
+                <h3 :class="['text-sm font-semibold', group.color]">{{ group.label }}</h3>
+                <span class="text-xs text-slate-400 dark:text-slate-500">({{ group.tasks.length }})</span>
+                <div class="flex-1 h-px bg-slate-200 dark:bg-slate-700 ml-2"></div>
+              </div>
+              
+              <!-- Tasks in group -->
+              <TaskCard
+                v-for="task in group.tasks"
+                :key="task.id"
+                :task="task"
+                :categories="categories"
+                @toggle="handleToggleTask(task.id)"
+                @toggle-subtask="handleToggleSubtask"
+                @delete="handleDeleteTask(task.id)"
+                @delete-subtask="handleDeleteSubtask"
+                @edit="handleEditTask"
+                @update-subtask-title="handleUpdateSubtaskTitle"
+                @update-category="handleUpdateTaskCategory"
+              />
+            </div>
+          </template>
         </div>
 
       </div>

@@ -27,6 +27,28 @@ const currentCategory = computed(() => {
   return props.categories.find(c => c.id === props.task.category) || { id: '', name: 'Unknown', color: '#94a3b8' };
 });
 
+// Check if task is overdue
+const isOverdue = computed(() => {
+  if (props.task.is_completed) return false;
+  if (!props.task.due_date || props.task.due_date === 'No Due Date') return false;
+  const taskDate = new Date(props.task.due_date);
+  taskDate.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return taskDate.getTime() < today.getTime();
+});
+
+// Check if task is due today
+const isDueToday = computed(() => {
+  if (props.task.is_completed) return false;
+  if (!props.task.due_date || props.task.due_date === 'No Due Date') return false;
+  const taskDate = new Date(props.task.due_date);
+  taskDate.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return taskDate.getTime() === today.getTime();
+});
+
 const handleClickOutside = (event: MouseEvent) => {
   if (categoryMenuRef.value && !categoryMenuRef.value.contains(event.target as Node)) {
     isCategoryOpen.value = false;
@@ -196,8 +218,29 @@ const handleCategoryKeydown = (event: KeyboardEvent, catId: CategoryId) => {
         </div>
 
         <div class="flex flex-wrap items-center gap-3 text-xs mt-1">
-          <!-- Due Date Badge -->
-          <span :class="['flex items-center gap-1 font-medium px-2 py-0.5 rounded', task.due_date_bg || '', task.due_date_color || 'text-slate-500']">
+          <!-- Overdue Badge -->
+          <span 
+            v-if="isOverdue" 
+            class="flex items-center gap-1 font-medium px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+          >
+            <span class="material-symbols-outlined text-[14px]">warning</span>
+            Overdue
+          </span>
+
+          <!-- Due Today Badge -->
+          <span 
+            v-else-if="isDueToday" 
+            class="flex items-center gap-1 font-medium px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
+          >
+            <span class="material-symbols-outlined text-[14px]">today</span>
+            Today
+          </span>
+
+          <!-- Due Date Badge (for other dates) -->
+          <span 
+            v-else-if="task.due_date && task.due_date !== 'No Due Date'"
+            :class="['flex items-center gap-1 font-medium px-2 py-0.5 rounded', task.due_date_bg || 'bg-slate-100 dark:bg-slate-800', task.due_date_color || 'text-slate-500']"
+          >
             <span class="material-symbols-outlined text-[14px]">{{ task.due_date_icon || 'calendar_today' }}</span>
             {{ task.due_date }}
           </span>

@@ -83,6 +83,18 @@ onUnmounted(() => {
       <h2 class="text-lg font-bold leading-tight tracking-[-0.015em]">EZtodo</h2>
     </div>
     <div class="flex flex-1 justify-end items-center gap-4">
+      <!-- Buy Me a Coffee -->
+      <a 
+        href="https://buymeacoffee.com/eztodoapp" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        aria-label="Buy me a coffee"
+        class="flex items-center justify-center size-9 rounded-lg text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+        title="Buy me a coffee"
+      >
+        <span class="text-xl">☕</span>
+      </a>
+
       <!-- Sync Status Indicator -->
       <SyncIndicator :status="syncStatus || 'synced'" />
 

@@ -25,6 +25,8 @@ export interface Task {
   due_date_bg?: string;
   due_date_icon?: string;
   subtasks?: Subtask[];
+  reminder_at?: string; // ISO timestamp for reminder notification
+  reminder_sent?: boolean; // Whether the reminder has been sent
   created_at?: string;
   updated_at?: string;
 }

@@ -49,6 +49,26 @@ const isDueToday = computed(() => {
   return taskDate.getTime() === today.getTime();
 });
 
+// Check if task has a reminder set
+const hasReminder = computed(() => {
+  return !!props.task.reminder_at && !props.task.reminder_sent;
+});
+
+// Format reminder time for display
+const formattedReminderTime = computed(() => {
+  if (!props.task.reminder_at) return '';
+  const date = new Date(props.task.reminder_at);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const isTomorrow = date.toDateString() === new Date(now.getTime() + 86400000).toDateString();
+  
+  const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  
+  if (isToday) return `Today ${timeStr}`;
+  if (isTomorrow) return `Tomorrow ${timeStr}`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ` ${timeStr}`;
+});
+
 const handleClickOutside = (event: MouseEvent) => {
   if (categoryMenuRef.value && !categoryMenuRef.value.contains(event.target as Node)) {
     isCategoryOpen.value = false;
@@ -294,6 +314,16 @@ const handleCategoryKeydown = (event: KeyboardEvent, catId: CategoryId) => {
           <span v-if="task.subtasks && task.subtasks.length > 0" class="flex items-center gap-1 text-slate-400">
              <span class="material-symbols-outlined text-[14px]">checklist</span>
              {{ task.subtasks.filter(s => s.is_completed).length }}/{{ task.subtasks.length }}
+          </span>
+          
+          <!-- Reminder badge -->
+          <span 
+            v-if="hasReminder" 
+            class="flex items-center gap-1 font-medium px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400"
+            :title="`Reminder: ${formattedReminderTime}`"
+          >
+            <span class="material-symbols-outlined text-[14px]">notifications</span>
+            {{ formattedReminderTime }}
           </span>
         </div>
       </div>

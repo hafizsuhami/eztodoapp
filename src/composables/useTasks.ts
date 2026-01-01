@@ -129,7 +129,9 @@ export function useTasks(userId: () => string | undefined) {
             due_date_color: data.due_date_color,
             due_date_bg: data.due_date_bg,
             due_date_icon: data.due_date_icon,
-            subtasks: data.subtasks || []
+            subtasks: data.subtasks || [],
+            reminder_at: data.reminder_at || null,
+            reminder_sent: false
           })
           .select()
           .single();

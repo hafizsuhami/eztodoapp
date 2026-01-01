@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick } from 'vue';
 import type { Task, CategoryOption, CategoryId, Subtask } from '../types';
+import { usePushNotifications } from '../composables/usePushNotifications';
 
 const props = defineProps<{
   isOpen: boolean;
@@ -10,14 +11,19 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
-  save: [taskId: string, title: string, subtasks: Subtask[], category: CategoryId, dueDate: string];
+  save: [taskId: string, title: string, subtasks: Subtask[], category: CategoryId, dueDate: string, reminderAt: string | null];
 }>();
+
+const { isSubscribed, subscribe, needsPWAInstall, showIOSPrompt, dismissIOSPrompt } = usePushNotifications();
 
 // Form state
 const editTitle = ref('');
 const editDueDate = ref('');
 const editCategory = ref<CategoryId>('');
 const editSubtasks = ref<Subtask[]>([]);
+const reminderEnabled = ref(false);
+const reminderDate = ref('');
+const reminderTime = ref('09:00');
 
 // Voice recognition
 const isListening = ref(false);
@@ -57,6 +63,18 @@ watch(() => props.task, (task) => {
     editDueDate.value = task.due_date === 'No Due Date' ? '' : task.due_date;
     editCategory.value = task.category;
     editSubtasks.value = task.subtasks ? task.subtasks.map(s => ({ ...s })) : [];
+    
+    // Populate reminder fields
+    if (task.reminder_at) {
+      reminderEnabled.value = true;
+      const reminderDateTime = new Date(task.reminder_at);
+      reminderDate.value = reminderDateTime.toISOString().split('T')[0];
+      reminderTime.value = reminderDateTime.toTimeString().slice(0, 5);
+    } else {
+      reminderEnabled.value = false;
+      reminderDate.value = '';
+      reminderTime.value = '09:00';
+    }
   }
 }, { immediate: true });
 
@@ -70,6 +88,9 @@ watch(() => props.isOpen, async (open) => {
   } else {
     isListening.value = false;
     newSubtaskTitle.value = '';
+    reminderEnabled.value = false;
+    reminderDate.value = '';
+    reminderTime.value = '09:00';
     if (recognition) {
       recognition.stop();
     }
@@ -166,14 +187,43 @@ const handleAddSubtaskKeydown = (e: KeyboardEvent) => {
 const handleSubmit = () => {
   if (!editTitle.value.trim() || !props.task) return;
 
+  // Build reminder timestamp if enabled
+  let reminderAt: string | null = null;
+  if (reminderEnabled.value && reminderDate.value && reminderTime.value) {
+    reminderAt = new Date(`${reminderDate.value}T${reminderTime.value}`).toISOString();
+  }
+
   emit('save',
     props.task.id,
     editTitle.value.trim(),
     editSubtasks.value.filter(s => s.title.trim()),
     editCategory.value,
-    editDueDate.value || 'No Due Date'
+    editDueDate.value || 'No Due Date',
+    reminderAt
   );
   emit('close');
+};
+
+// Handle enabling reminder - prompt for notification permission if needed
+const handleReminderToggle = async () => {
+  if (!reminderEnabled.value) {
+    // Enabling reminder
+    if (!isSubscribed.value) {
+      const granted = await subscribe();
+      if (!granted) {
+        return; // Don't enable if permission not granted
+      }
+    }
+    reminderEnabled.value = true;
+    // Set default reminder date to due date or today
+    if (editDueDate.value) {
+      reminderDate.value = editDueDate.value;
+    } else {
+      reminderDate.value = new Date().toISOString().split('T')[0];
+    }
+  } else {
+    reminderEnabled.value = false;
+  }
 };
 
 const handleClose = () => {
@@ -268,6 +318,71 @@ const handleClose = () => {
                   type="date"
                   class="w-full bg-slate-50 dark:bg-[#161f30] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
                 />
+              </div>
+
+              <!-- Reminder Section -->
+              <div class="flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                  <label class="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Reminder <span class="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <button
+                    type="button"
+                    @click="handleReminderToggle"
+                    :class="[
+                      'relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50',
+                      reminderEnabled ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'
+                    ]"
+                    role="switch"
+                    :aria-checked="reminderEnabled"
+                  >
+                    <span
+                      :class="[
+                        'inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm',
+                        reminderEnabled ? 'translate-x-6' : 'translate-x-1'
+                      ]"
+                    />
+                  </button>
+                </div>
+                
+                <!-- Reminder Date/Time Picker -->
+                <div v-if="reminderEnabled" class="flex gap-2">
+                  <input
+                    v-model="reminderDate"
+                    type="date"
+                    class="flex-1 bg-slate-50 dark:bg-[#161f30] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  />
+                  <input
+                    v-model="reminderTime"
+                    type="time"
+                    class="w-28 bg-slate-50 dark:bg-[#161f30] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  />
+                </div>
+                
+                <!-- iOS PWA Prompt -->
+                <div v-if="showIOSPrompt" class="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+                  <div class="flex items-start gap-2">
+                    <span class="material-symbols-outlined text-amber-500 text-[20px] mt-0.5">info</span>
+                    <div class="flex-1">
+                      <p class="text-sm font-medium text-amber-800 dark:text-amber-200">Install app for reminders</p>
+                      <p class="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                        On iPhone, tap <span class="material-symbols-outlined text-[14px] align-middle">ios_share</span> then "Add to Home Screen" to enable push notifications.
+                      </p>
+                      <button
+                        type="button"
+                        @click="dismissIOSPrompt"
+                        class="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300 hover:underline"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                <p v-if="reminderEnabled && !showIOSPrompt" class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[14px]">notifications</span>
+                  You'll receive a notification at this time
+                </p>
               </div>
 
               <!-- Category -->

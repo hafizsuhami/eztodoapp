@@ -203,9 +203,20 @@ defineEmits<{
           </div>
           <span class="font-bold text-slate-700 dark:text-slate-300">EZtodo</span>
         </div>
-        <p class="text-sm text-slate-500 dark:text-slate-400">
-          Made with ☕ and good intentions
-        </p>
+        <div class="flex items-center gap-4">
+          <a 
+            href="https://buymeacoffee.com/eztodoapp" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-amber-400 hover:bg-amber-500 text-slate-800 text-sm font-semibold rounded-full shadow-md hover:shadow-lg transition-all hover:scale-105"
+          >
+            <span class="text-lg">☕</span>
+            Buy me a coffee
+          </a>
+          <p class="text-sm text-slate-500 dark:text-slate-400">
+            Made with ☕ and good intentions
+          </p>
+        </div>
       </div>
     </footer>
   </div>

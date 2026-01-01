@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import Header from './components/Header.vue';
 import TaskCard from './components/TaskCard.vue';
 import AddTaskModal from './components/AddTaskModal.vue';
@@ -9,17 +9,33 @@ import LandingPage from './components/LandingPage.vue';
 import CategoryManagerModal from './components/CategoryManagerModal.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
 import ToastContainer from './components/ToastContainer.vue';
+import IOSInstallPrompt from './components/IOSInstallPrompt.vue';
 import { type TaskStatus, type Subtask, type CategoryId, type Task } from './types';
 import { useAuth } from './composables/useAuth';
 import { useTasks } from './composables/useTasks';
 import { useCategories } from './composables/useCategories';
 import { useToast } from './composables/useToast';
+import { usePushNotifications } from './composables/usePushNotifications';
 
 // Auth composable
 const { user, loading: authLoading, isAuthenticated, loginWithGoogle, logout } = useAuth();
 
 // Toast notifications
 const toast = useToast();
+
+// Push notifications - link OneSignal user to Supabase user
+const { setExternalUserId, isSubscribed } = usePushNotifications();
+
+// When user logs in and has push notifications enabled, link their Supabase ID to OneSignal
+watch(
+  () => [user.value?.id, isSubscribed.value],
+  async ([userId, subscribed]) => {
+    if (userId && subscribed) {
+      await setExternalUserId(userId);
+    }
+  },
+  { immediate: true }
+);
 
 // Tasks composable - reactive to user.value.id
 const getUserId = () => user.value?.id;
@@ -377,13 +393,16 @@ const handleSaveEditedTask = (
   title: string,
   subtasks: Subtask[],
   category: CategoryId,
-  dueDate: string
+  dueDate: string,
+  reminderAt: string | null
 ) => {
   updateTask(taskId, {
     title,
     subtasks,
     category,
-    due_date: dueDate
+    due_date: dueDate,
+    reminder_at: reminderAt || undefined,
+    reminder_sent: reminderAt ? false : undefined
   });
   isEditModalOpen.value = false;
   taskToEdit.value = null;
@@ -395,7 +414,7 @@ const handleCloseEditModal = () => {
   taskToEdit.value = null;
 };
 
-const handleSaveNewTask = (title: string, subtaskTitles: string[], category: CategoryId, dueDate: string) => {
+const handleSaveNewTask = (title: string, subtaskTitles: string[], category: CategoryId, dueDate: string, reminderAt: string | null) => {
   const subtasks: Subtask[] = subtaskTitles.map(s => ({
     id: Date.now().toString() + Math.random().toString(),
     title: s,
@@ -408,7 +427,9 @@ const handleSaveNewTask = (title: string, subtaskTitles: string[], category: Cat
     category,
     due_date: dueDate || 'No Due Date',
     due_date_color: 'text-slate-500',
-    subtasks
+    subtasks,
+    reminder_at: reminderAt || undefined,
+    reminder_sent: false
   });
   toast.success('Task created');
 };
@@ -799,5 +820,8 @@ const getCategoryTaskCount = (catId: string) => {
 
     <!-- Toast Notifications -->
     <ToastContainer />
+    
+    <!-- iOS Install Prompt -->
+    <IOSInstallPrompt />
   </template>
 </template>

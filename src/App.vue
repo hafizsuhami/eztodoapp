@@ -18,6 +18,7 @@ import { useCategories } from './composables/useCategories';
 import { useToast } from './composables/useToast';
 import { usePushNotifications } from './composables/usePushNotifications';
 import { useTaskSharing } from './composables/useTaskSharing';
+import { version } from '../package.json';
 
 // Auth composable
 const { user, loading: authLoading, isAuthenticated, loginWithGoogle, logout } = useAuth();
@@ -919,6 +920,11 @@ const getCategoryTaskCount = (catId: string) => {
 
       </div>
     </main>
+
+    <!-- Footer with version -->
+    <footer class="py-4 text-center text-xs text-slate-400 dark:text-slate-500">
+      <p>v{{ version }}</p>
+    </footer>
 
     <AddTaskModal
       :is-open="isAddModalOpen"

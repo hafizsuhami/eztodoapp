@@ -18,7 +18,15 @@ import { useCategories } from './composables/useCategories';
 import { useToast } from './composables/useToast';
 import { usePushNotifications } from './composables/usePushNotifications';
 import { useTaskSharing } from './composables/useTaskSharing';
-import { version } from '../package.json';
+
+// Build-time version info injected by Vite
+declare const __APP_VERSION__: string;
+declare const __GIT_COMMIT__: string;
+declare const __BUILD_DATE__: string;
+
+const appVersion = __APP_VERSION__;
+const gitCommit = __GIT_COMMIT__;
+const buildDate = __BUILD_DATE__;
 
 // Auth composable
 const { user, loading: authLoading, isAuthenticated, loginWithGoogle, logout } = useAuth();
@@ -923,7 +931,7 @@ const getCategoryTaskCount = (catId: string) => {
 
     <!-- Footer with version -->
     <footer class="py-4 text-center text-xs text-slate-400 dark:text-slate-500">
-      <p>v{{ version }}</p>
+      <p>v{{ appVersion }} ({{ gitCommit }}) - {{ buildDate }}</p>
     </footer>
 
     <AddTaskModal

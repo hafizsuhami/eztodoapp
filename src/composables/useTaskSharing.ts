@@ -82,7 +82,7 @@ export function useTaskSharing() {
     }
   };
 
-  // Generate shareable link
+  // Generate shareable link (or return existing one)
   const generateShareLink = async (taskId: string, expiresInDays?: number): Promise<ShareLinkResponse | null> => {
     if (!taskId) return null;
 
@@ -93,7 +93,29 @@ export function useTaskSharing() {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error('Not authenticated');
 
-      // Generate token via database function
+      // Check if there's already an active share link for this task
+      const { data: existingShare } = await supabase
+        .from('task_shares')
+        .select('*')
+        .eq('task_id', taskId)
+        .eq('owner_id', userData.user.id)
+        .not('share_token', 'is', null)
+        .neq('status', 'revoked')
+        .or('expires_at.is.null,expires_at.gt.now()')
+        .single();
+
+      if (existingShare) {
+        // Return existing link
+        const shareUrl = `${window.location.origin}/share/${existingShare.share_token}`;
+        return {
+          share_id: existingShare.id,
+          share_token: existingShare.share_token,
+          share_url: shareUrl,
+          expires_at: existingShare.expires_at
+        };
+      }
+
+      // Generate new token via database function
       const { data: tokenData, error: tokenError } = await supabase.rpc('generate_share_token');
       if (tokenError) throw tokenError;
       const token = tokenData as string;

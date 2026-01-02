@@ -264,7 +264,7 @@ BEGIN
     'task', json_build_object(
       'id', v_task.id,
       'title', v_task.title,
-      'status', v_task.status,
+      'is_completed', v_task.is_completed,
       'category', v_task.category,
       'due_date', v_task.due_date,
       'subtasks', v_task.subtasks

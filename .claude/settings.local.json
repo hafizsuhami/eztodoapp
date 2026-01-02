@@ -7,7 +7,8 @@
       "Bash(git commit:*)",
       "Bash(git reset:*)",
       "Bash(git push)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "WebFetch(domain:eztodo.pages.dev)"
     ]
   }
 }

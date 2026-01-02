@@ -9,7 +9,7 @@ import LandingPage from './components/LandingPage.vue';
 import CategoryManagerModal from './components/CategoryManagerModal.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
 import ToastContainer from './components/ToastContainer.vue';
-import IOSInstallPrompt from './components/IOSInstallPrompt.vue';
+import InstallPrompt from './components/InstallPrompt.vue';
 import ShareTaskModal from './components/ShareTaskModal.vue';
 import { type TaskStatus, type Subtask, type CategoryId, type Task } from './types';
 import { useAuth } from './composables/useAuth';
@@ -973,7 +973,7 @@ const getCategoryTaskCount = (catId: string) => {
     <!-- Toast Notifications -->
     <ToastContainer />
     
-    <!-- iOS Install Prompt -->
-    <IOSInstallPrompt />
+    <!-- Install Prompt (iOS + Android/Chrome) -->
+    <InstallPrompt />
   </template>
 </template>

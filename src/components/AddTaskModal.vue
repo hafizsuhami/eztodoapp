@@ -208,7 +208,7 @@ const handleReminderToggle = async () => {
     >
       <div 
         ref="modalRef"
-        class="bg-white dark:bg-[#1e293b] rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden border border-slate-200 dark:border-slate-700 transform transition-all scale-100 pb-safe sm:pb-0"
+        class="bg-white dark:bg-[#1e293b] rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-md overflow-hidden border border-slate-200 dark:border-slate-700 transform transition-all scale-100 pb-safe sm:pb-0"
       >
         <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-700">
           <h3 id="add-task-modal-title" class="text-lg font-bold text-slate-900 dark:text-white">Add New Task</h3>

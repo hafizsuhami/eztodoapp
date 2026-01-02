@@ -10,12 +10,14 @@ import CategoryManagerModal from './components/CategoryManagerModal.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
 import ToastContainer from './components/ToastContainer.vue';
 import IOSInstallPrompt from './components/IOSInstallPrompt.vue';
+import ShareTaskModal from './components/ShareTaskModal.vue';
 import { type TaskStatus, type Subtask, type CategoryId, type Task } from './types';
 import { useAuth } from './composables/useAuth';
 import { useTasks } from './composables/useTasks';
 import { useCategories } from './composables/useCategories';
 import { useToast } from './composables/useToast';
 import { usePushNotifications } from './composables/usePushNotifications';
+import { useTaskSharing } from './composables/useTaskSharing';
 
 // Auth composable
 const { user, loading: authLoading, isAuthenticated, loginWithGoogle, logout } = useAuth();
@@ -26,12 +28,78 @@ const toast = useToast();
 // Push notifications - link OneSignal user to Supabase user
 const { setExternalUserId, isSubscribed } = usePushNotifications();
 
+// Task sharing
+const { claimPendingShares, acceptShareByToken } = useTaskSharing();
+
+// Share link handling
+const shareToken = ref<string | null>(null);
+const shareAccepting = ref(false);
+const shareError = ref<string | null>(null);
+
+// Check if we're on a share link URL
+const checkShareUrl = () => {
+  const path = window.location.pathname;
+  const match = path.match(/^\/share\/([a-zA-Z0-9_-]+)$/);
+  if (match) {
+    shareToken.value = match[1];
+  }
+};
+
+// Accept share when user is authenticated
+const handleAcceptShare = async () => {
+  if (!shareToken.value || !user.value?.id) return;
+
+  shareAccepting.value = true;
+  shareError.value = null;
+
+  try {
+    const result = await acceptShareByToken(shareToken.value);
+    if (result) {
+      toast.success('Task added to your list!');
+      // Clear the share token and redirect to home
+      shareToken.value = null;
+      window.history.replaceState({}, '', '/');
+    } else {
+      shareError.value = 'Failed to accept share. The link may be invalid or expired.';
+    }
+  } catch (e: any) {
+    shareError.value = e.message || 'Failed to accept share';
+  } finally {
+    shareAccepting.value = false;
+  }
+};
+
+// Check for share URL on mount
+onMounted(() => {
+  checkShareUrl();
+});
+
 // When user logs in and has push notifications enabled, link their Supabase ID to OneSignal
 watch(
   () => [user.value?.id, isSubscribed.value],
   async ([userId, subscribed]) => {
     if (userId && subscribed) {
       await setExternalUserId(userId);
+    }
+  },
+  { immediate: true }
+);
+
+// When user logs in, claim any pending shares and accept share link if present
+watch(
+  () => user.value?.id,
+  async (userId) => {
+    if (userId) {
+      // If we have a pending share token, accept it
+      if (shareToken.value) {
+        await handleAcceptShare();
+      }
+
+      // Also claim any pending email shares
+      const claimed = await claimPendingShares();
+      if (claimed > 0) {
+        toast.success(`${claimed} shared task${claimed > 1 ? 's' : ''} added to your list!`);
+      }
     }
   },
   { immediate: true }
@@ -76,6 +144,10 @@ const isQuickAddFocused = ref(false);
 // Edit task modal state
 const isEditModalOpen = ref(false);
 const taskToEdit = ref<Task | null>(null);
+
+// Share task modal state
+const isShareModalOpen = ref(false);
+const taskToShare = ref<Task | null>(null);
 
 // Subtask delete confirmation state
 const showSubtaskDeleteConfirm = ref(false);
@@ -414,6 +486,19 @@ const handleCloseEditModal = () => {
   taskToEdit.value = null;
 };
 
+const handleShareTask = (id: string) => {
+  const task = tasks.value.find(t => t.id === id);
+  if (task) {
+    taskToShare.value = task;
+    isShareModalOpen.value = true;
+  }
+};
+
+const handleCloseShareModal = () => {
+  isShareModalOpen.value = false;
+  taskToShare.value = null;
+};
+
 const handleSaveNewTask = (title: string, subtaskTitles: string[], category: CategoryId, dueDate: string, reminderAt: string | null) => {
   const subtasks: Subtask[] = subtaskTitles.map(s => ({
     id: Date.now().toString() + Math.random().toString(),
@@ -487,10 +572,64 @@ const getCategoryTaskCount = (catId: string) => {
     </div>
   </div>
 
+  <!-- Share Link Landing Page -->
+  <div v-else-if="shareToken" class="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#111722] p-4">
+    <div class="bg-white dark:bg-[#1e293b] rounded-2xl shadow-xl p-8 max-w-sm w-full text-center border border-slate-200 dark:border-slate-700">
+      <div class="size-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+        <span class="material-symbols-outlined text-3xl text-primary">share</span>
+      </div>
+      <h2 class="text-xl font-bold text-slate-900 dark:text-white mb-2">
+        You've been invited!
+      </h2>
+      <p class="text-slate-500 dark:text-slate-400 text-sm mb-6">
+        Someone shared a task with you. Sign in to add it to your list.
+      </p>
+
+      <div v-if="shareError" class="mb-4 p-3 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 rounded-lg text-sm">
+        {{ shareError }}
+      </div>
+
+      <div v-if="shareAccepting" class="flex flex-col items-center gap-3">
+        <span class="material-symbols-outlined text-2xl text-primary animate-spin">progress_activity</span>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">Adding task to your list...</p>
+      </div>
+
+      <template v-else-if="!isAuthenticated">
+        <button
+          @click="loginWithGoogle"
+          class="w-full py-3 px-4 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+        >
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#fff"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#fff"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#fff"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#fff"/>
+          </svg>
+          Sign in with Google
+        </button>
+        <button
+          @click="shareToken = null; window.history.replaceState({}, '', '/')"
+          class="mt-3 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+        >
+          No thanks, go to homepage
+        </button>
+      </template>
+
+      <template v-else>
+        <button
+          @click="handleAcceptShare"
+          class="w-full py-3 px-4 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition-colors"
+        >
+          Accept and view task
+        </button>
+      </template>
+    </div>
+  </div>
+
   <!-- Landing Page for non-authenticated users -->
-  <LandingPage 
-    v-else-if="!isAuthenticated" 
-    @get-started="loginWithGoogle" 
+  <LandingPage
+    v-else-if="!isAuthenticated"
+    @get-started="loginWithGoogle"
   />
 
   <!-- Main App for authenticated users -->
@@ -527,7 +666,7 @@ const getCategoryTaskCount = (catId: string) => {
               aria-label="Add new task"
             >
               <span class="material-symbols-outlined text-[20px]" aria-hidden="true">add</span>
-              <span class="truncate">Add New Task</span>
+              <span class="whitespace-nowrap">Add New Task</span>
             </button>
           </div>
 
@@ -770,6 +909,7 @@ const getCategoryTaskCount = (catId: string) => {
                 @delete="handleDeleteTask(task.id)"
                 @delete-subtask="handleDeleteSubtask"
                 @edit="handleEditTask"
+                @share="handleShareTask"
                 @update-subtask-title="handleUpdateSubtaskTitle"
                 @update-category="handleUpdateTaskCategory"
               />
@@ -803,6 +943,12 @@ const getCategoryTaskCount = (catId: string) => {
       @update-category="(id, updates) => updateCategoryFn(id, updates)"
       @create-category="(name, color) => createCategory(name, color)"
       @delete-category="(id) => deleteCategoryFn(id)"
+    />
+
+    <ShareTaskModal
+      :is-open="isShareModalOpen"
+      :task="taskToShare"
+      @close="handleCloseShareModal"
     />
 
     <!-- Subtask Delete Confirmation Modal -->

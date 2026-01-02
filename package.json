@@ -5,9 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm version patch --no-git-tag-version && vue-tsc -b && vite build",
-    "build:minor": "npm version minor --no-git-tag-version && vue-tsc -b && vite build",
-    "build:major": "npm version major --no-git-tag-version && vue-tsc -b && vite build",
+    "build": "vue-tsc -b && vite build",
+    "build:bump": "bunx npm version patch --no-git-tag-version && vue-tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -12,11 +12,15 @@ const emit = defineEmits<{
   toggle: [];
   delete: [];
   edit: [id: string];
+  share: [id: string];
   toggleSubtask: [taskId: string, subtaskId: string];
   deleteSubtask: [taskId: string, subtaskId: string];
   updateSubtaskTitle: [taskId: string, subtaskId: string, newTitle: string];
   updateCategory: [taskId: string, newCategory: CategoryId];
 }>();
+
+// Check if this is a shared task (not owned by current user)
+const isSharedWithMe = computed(() => !!props.task.is_shared_with_me);
 
 const isCategoryOpen = ref(false);
 const categoryMenuRef = ref<HTMLDivElement | null>(null);
@@ -178,15 +182,24 @@ const handleCategoryKeydown = (event: KeyboardEvent, catId: CategoryId) => {
           
           <!-- Mobile Actions -->
           <span class="flex sm:hidden ml-auto gap-3 shrink-0">
-             <button 
-               @click="emit('edit', task.id)" 
+             <button
+               v-if="!isSharedWithMe"
+               @click="emit('share', task.id)"
+               class="text-slate-400 active:text-primary p-1 -m-1"
+               :aria-label="`Share task: ${task.title}`"
+             >
+              <span class="material-symbols-outlined text-[20px]" aria-hidden="true">share</span>
+             </button>
+             <button
+               @click="emit('edit', task.id)"
                class="text-slate-400 active:text-primary p-1 -m-1"
                :aria-label="`Edit task: ${task.title}`"
              >
               <span class="material-symbols-outlined text-[20px]" aria-hidden="true">edit</span>
              </button>
-             <button 
-               @click="handleDeleteClick" 
+             <button
+               v-if="!isSharedWithMe"
+               @click="handleDeleteClick"
                class="text-slate-400 active:text-red-500 p-1 -m-1"
                :aria-label="`Delete task: ${task.title}`"
              >
@@ -317,13 +330,37 @@ const handleCategoryKeydown = (event: KeyboardEvent, catId: CategoryId) => {
           </span>
           
           <!-- Reminder badge -->
-          <span 
-            v-if="hasReminder" 
+          <span
+            v-if="hasReminder"
             class="flex items-center gap-1 font-medium px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400"
             :title="`Reminder: ${formattedReminderTime}`"
           >
             <span class="material-symbols-outlined text-[14px]">notifications</span>
             {{ formattedReminderTime }}
+          </span>
+
+          <!-- Shared with me badge -->
+          <span
+            v-if="isSharedWithMe"
+            class="flex items-center gap-1 font-medium px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+            :title="task.shared_by ? `Shared by ${task.shared_by.name}` : 'Shared with you'"
+          >
+            <!-- Avatar (if available) -->
+            <img
+              v-if="task.shared_by?.avatar"
+              :src="task.shared_by.avatar"
+              :alt="task.shared_by.name"
+              class="size-4 rounded-full object-cover"
+            />
+            <span v-else class="material-symbols-outlined text-[14px]" aria-hidden="true">person</span>
+            <!-- Desktop: Show full "Shared by Name" -->
+            <span class="hidden sm:inline">
+              {{ task.shared_by ? `by ${task.shared_by.name}` : 'Shared' }}
+            </span>
+            <!-- Mobile: Show truncated name -->
+            <span class="sm:hidden max-w-[60px] truncate">
+              {{ task.shared_by?.name || 'Shared' }}
+            </span>
           </span>
         </div>
       </div>
@@ -331,16 +368,26 @@ const handleCategoryKeydown = (event: KeyboardEvent, catId: CategoryId) => {
 
     <!-- Desktop Actions -->
     <div class="hidden sm:flex items-center gap-1 ml-4 opacity-0 group-hover:opacity-100 transition-opacity self-center">
-      <button 
-        class="size-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-[#2d3b55] hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50" 
+      <!-- Share button (only for owned tasks) -->
+      <button
+        v-if="!isSharedWithMe"
+        class="size-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-[#2d3b55] hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50"
+        :aria-label="`Share task: ${task.title}`"
+        @click="emit('share', task.id)"
+      >
+        <span class="material-symbols-outlined text-[20px]" aria-hidden="true">share</span>
+      </button>
+      <button
+        class="size-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-[#2d3b55] hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50"
         :aria-label="`Edit task: ${task.title}`"
         @click="emit('edit', task.id)"
       >
         <span class="material-symbols-outlined text-[20px]" aria-hidden="true">edit</span>
       </button>
-      <button 
+      <button
+        v-if="!isSharedWithMe"
         @click="handleDeleteClick"
-        class="size-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-[#2d3b55] hover:text-red-500 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/50" 
+        class="size-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-[#2d3b55] hover:text-red-500 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/50"
         :aria-label="`Delete task: ${task.title}`"
       >
         <span class="material-symbols-outlined text-[20px]" aria-hidden="true">delete</span>

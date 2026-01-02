@@ -931,7 +931,7 @@ const getCategoryTaskCount = (catId: string) => {
 
     <!-- Footer with version -->
     <footer class="py-4 text-center text-xs text-slate-400 dark:text-slate-500">
-      <p>v{{ appVersion }} ({{ gitCommit }}) - {{ buildDate }}</p>
+      <p>v{{ appVersion }}</p>
     </footer>
 
     <AddTaskModal

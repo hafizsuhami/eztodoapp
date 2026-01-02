@@ -16,6 +16,9 @@ const emit = defineEmits<{
 
 const { isSubscribed, subscribe, needsPWAInstall, showIOSPrompt, dismissIOSPrompt } = usePushNotifications();
 
+// Check if this is a shared task (not owned by current user)
+const isSharedWithMe = computed(() => !!props.task?.is_shared_with_me);
+
 // Form state
 const editTitle = ref('');
 const editDueDate = ref('');
@@ -280,6 +283,7 @@ const handleClose = () => {
               <div class="flex flex-col gap-1.5">
                 <label for="edit-task-title" class="text-sm font-semibold text-slate-700 dark:text-slate-300">
                   Task Title
+                  <span v-if="isSharedWithMe" class="text-slate-400 font-normal">(Only owner can edit)</span>
                 </label>
                 <div class="relative">
                   <input
@@ -288,15 +292,20 @@ const handleClose = () => {
                     v-model="editTitle"
                     type="text"
                     placeholder="What needs to be done?"
-                    class="w-full bg-slate-50 dark:bg-[#161f30] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 pr-12 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                    :disabled="isSharedWithMe"
+                    :class="[
+                      'w-full bg-slate-50 dark:bg-[#161f30] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 pr-12 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all',
+                      isSharedWithMe ? 'opacity-60 cursor-not-allowed' : ''
+                    ]"
                   />
                   <button
+                    v-if="!isSharedWithMe"
                     type="button"
                     @click="toggleListening"
                     :class="[
                       'absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-primary/50',
-                      isListening 
-                        ? 'text-red-500 bg-red-500/10 animate-pulse' 
+                      isListening
+                        ? 'text-red-500 bg-red-500/10 animate-pulse'
                         : 'text-slate-400 hover:text-primary hover:bg-slate-200 dark:hover:bg-slate-700'
                     ]"
                     :aria-label="isListening ? 'Stop voice input' : 'Start voice input'"

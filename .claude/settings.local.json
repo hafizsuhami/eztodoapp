@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun run build)",
+      "Bash(C:Usershafiz.buninstallglobalnode_modules.binsupabase functions deploy send-reminders)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git reset:*)",
+      "Bash(git push)",
+      "Bash(git push:*)"
+    ]
+  }
+}

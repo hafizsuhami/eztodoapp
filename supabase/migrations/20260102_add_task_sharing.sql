@@ -215,6 +215,57 @@ BEGIN
 END;
 $$;
 
+-- Function to get share preview (without accepting)
+CREATE OR REPLACE FUNCTION get_share_preview(p_token TEXT)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_share task_shares;
+  v_task tasks;
+  v_owner_name TEXT;
+  v_owner_avatar TEXT;
+BEGIN
+  -- Find the share by token
+  SELECT * INTO v_share
+  FROM task_shares
+  WHERE share_token = p_token
+    AND status = 'pending'
+    AND (expires_at IS NULL OR expires_at > NOW());
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invalid or expired share link';
+  END IF;
+
+  -- Get the task
+  SELECT * INTO v_task
+  FROM tasks
+  WHERE id = v_share.task_id;
+
+  -- Get owner info from profiles
+  SELECT name, avatar_url INTO v_owner_name, v_owner_avatar
+  FROM profiles
+  WHERE id = v_share.owner_id;
+
+  RETURN json_build_object(
+    'task', json_build_object(
+      'id', v_task.id,
+      'title', v_task.title,
+      'status', v_task.status,
+      'category', v_task.category,
+      'due_date', v_task.due_date,
+      'subtasks', v_task.subtasks
+    ),
+    'owner', json_build_object(
+      'id', v_share.owner_id,
+      'name', COALESCE(v_owner_name, 'Someone'),
+      'avatar', v_owner_avatar
+    )
+  );
+END;
+$$;
+
 -- Enable real-time for task_shares (ignore error if already added)
 DO $$
 BEGIN

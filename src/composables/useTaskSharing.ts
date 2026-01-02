@@ -160,6 +160,26 @@ export function useTaskSharing() {
     }
   };
 
+  // Get task preview by share token (without accepting)
+  const getSharePreview = async (token: string): Promise<{ task: any; owner: any } | null> => {
+    loading.value = true;
+    error.value = null;
+
+    try {
+      const { data, error: previewError } = await supabase
+        .rpc('get_share_preview', { p_token: token });
+
+      if (previewError) throw previewError;
+      return data;
+    } catch (e: any) {
+      error.value = e.message || 'Invalid or expired share link';
+      console.error(e);
+      return null;
+    } finally {
+      loading.value = false;
+    }
+  };
+
   // Accept a share (for recipient via token)
   const acceptShareByToken = async (token: string): Promise<TaskShare | null> => {
     loading.value = true;
@@ -216,6 +236,7 @@ export function useTaskSharing() {
     shareByEmail,
     generateShareLink,
     revokeShare,
+    getSharePreview,
     acceptShareByToken,
     claimPendingShares,
     clearShares

@@ -226,10 +226,12 @@ END;
 $$;
 
 -- Function to get share preview (without accepting) - no auth required
+-- SECURITY DEFINER runs as the function owner, bypassing RLS
 CREATE OR REPLACE FUNCTION get_share_preview(p_token TEXT)
 RETURNS JSON
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_share task_shares;
@@ -275,6 +277,10 @@ BEGIN
   );
 END;
 $$;
+
+-- Grant execute to both anonymous and authenticated users
+GRANT EXECUTE ON FUNCTION get_share_preview(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION get_share_preview(TEXT) TO authenticated;
 
 -- Enable real-time for task_shares (ignore error if already added)
 DO $$

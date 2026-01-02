@@ -125,6 +125,7 @@ AS $$
 $$;
 
 -- Function to accept share via token (for link sharing)
+-- Creates a NEW share record for each user so links can be reused
 CREATE OR REPLACE FUNCTION accept_share_by_token(p_token TEXT)
 RETURNS task_shares
 LANGUAGE plpgsql
@@ -132,17 +133,17 @@ SECURITY DEFINER
 AS $$
 DECLARE
   v_share task_shares;
+  v_new_share task_shares;
   v_user_id UUID := auth.uid();
 BEGIN
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
-  -- Find the share by token
+  -- Find the share by token (can be pending or accepted - links are reusable)
   SELECT * INTO v_share
   FROM task_shares
   WHERE share_token = p_token
-    AND status = 'pending'
     AND (expires_at IS NULL OR expires_at > NOW());
 
   IF NOT FOUND THEN
@@ -164,16 +165,25 @@ BEGIN
     RAISE EXCEPTION 'Task already shared with you';
   END IF;
 
-  -- Update the share record
-  UPDATE task_shares
-  SET
-    shared_with_id = v_user_id,
-    status = 'accepted',
-    accepted_at = NOW()
-  WHERE id = v_share.id
-  RETURNING * INTO v_share;
+  -- Create a NEW share record for this user (keep original link intact)
+  INSERT INTO task_shares (
+    task_id,
+    owner_id,
+    shared_with_id,
+    permission,
+    status,
+    accepted_at
+  ) VALUES (
+    v_share.task_id,
+    v_share.owner_id,
+    v_user_id,
+    v_share.permission,
+    'accepted',
+    NOW()
+  )
+  RETURNING * INTO v_new_share;
 
-  RETURN v_share;
+  RETURN v_new_share;
 END;
 $$;
 
@@ -215,7 +225,7 @@ BEGIN
 END;
 $$;
 
--- Function to get share preview (without accepting)
+-- Function to get share preview (without accepting) - no auth required
 CREATE OR REPLACE FUNCTION get_share_preview(p_token TEXT)
 RETURNS JSON
 LANGUAGE plpgsql
@@ -227,11 +237,11 @@ DECLARE
   v_owner_name TEXT;
   v_owner_avatar TEXT;
 BEGIN
-  -- Find the share by token
+  -- Find the share by token (pending OR accepted - so link works after first accept)
   SELECT * INTO v_share
   FROM task_shares
   WHERE share_token = p_token
-    AND status = 'pending'
+    AND status IN ('pending', 'accepted')
     AND (expires_at IS NULL OR expires_at > NOW());
 
   IF NOT FOUND THEN

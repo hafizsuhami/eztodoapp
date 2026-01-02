@@ -19,22 +19,61 @@ export function useTasks(userId: () => string | undefined) {
   const error = ref<string | null>(null);
   const syncStatus = ref<SyncStatus>('synced');
 
-  // Fetch tasks from server
+  // Fetch tasks from server (owned + shared)
   const fetchTasks = async () => {
     const id = userId();
     if (!id) return;
-    
+
     try {
       syncStatus.value = 'syncing';
-      const { data, error: fetchError } = await supabase
+
+      // Fetch owned tasks
+      const { data: ownedTasks, error: ownedError } = await supabase
         .from('tasks')
         .select('*')
         .eq('user_id', id)
         .order('created_at', { ascending: false });
 
-      if (fetchError) throw fetchError;
-      
-      tasks.value = data || [];
+      if (ownedError) throw ownedError;
+
+      // Fetch tasks shared with this user (including owner profile info)
+      const { data: sharedData, error: sharedError } = await supabase
+        .from('task_shares')
+        .select(`
+          task_id,
+          owner_id,
+          tasks(*),
+          profiles!task_shares_owner_id_fkey_profiles(id, name, avatar_url)
+        `)
+        .eq('shared_with_id', id)
+        .eq('status', 'accepted');
+
+      if (sharedError) throw sharedError;
+
+      // Extract shared tasks and mark them with owner info
+      const sharedTasks: Task[] = (sharedData || [])
+        .filter(s => s.tasks)
+        .map(s => {
+          const profileData = s.profiles as { id: string; name: string; avatar_url: string }[] | { id: string; name: string; avatar_url: string } | null;
+          const profile = Array.isArray(profileData) ? profileData[0] : profileData;
+          return {
+            ...(s.tasks as unknown as Task),
+            is_shared_with_me: true,
+            shared_by: profile ? {
+              id: profile.id,
+              name: profile.name || 'User',
+              avatar: profile.avatar_url || ''
+            } : undefined
+          };
+        });
+
+      // Combine owned tasks (not shared) with shared tasks
+      const allTasks = [
+        ...(ownedTasks || []).map(t => ({ ...t, is_shared_with_me: false })),
+        ...sharedTasks
+      ];
+
+      tasks.value = allTasks;
       setCachedTasks(tasks.value);
       syncStatus.value = 'synced';
       error.value = null;
@@ -231,10 +270,12 @@ export function useTasks(userId: () => string | undefined) {
 
   // Setup real-time subscription
   let channel: RealtimeChannel | null = null;
+  let sharesChannel: RealtimeChannel | null = null;
 
   const setupSubscription = (id: string) => {
     if (channel || !isOnline()) return;
-    
+
+    // Subscribe to owned tasks changes
     channel = supabase
       .channel('tasks-changes')
       .on(
@@ -252,13 +293,31 @@ export function useTasks(userId: () => string | undefined) {
             setCachedTasks(tasks.value);
           } else if (payload.eventType === 'UPDATE') {
             const updatedTask = payload.new as Task;
-            tasks.value = tasks.value.map(t => t.id === updatedTask.id ? updatedTask : t);
+            tasks.value = tasks.value.map(t => t.id === updatedTask.id ? { ...t, ...updatedTask } : t);
             setCachedTasks(tasks.value);
           } else if (payload.eventType === 'DELETE') {
             const deletedTask = payload.old as { id: string };
             tasks.value = tasks.value.filter(t => t.id !== deletedTask.id);
             setCachedTasks(tasks.value);
           }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to shares changes (when someone shares with this user)
+    sharesChannel = supabase
+      .channel('shares-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'task_shares',
+          filter: `shared_with_id=eq.${id}`
+        },
+        async () => {
+          // Refetch tasks when shares change
+          await fetchTasks();
         }
       )
       .subscribe();
@@ -294,6 +353,9 @@ export function useTasks(userId: () => string | undefined) {
     window.removeEventListener('offline', handleOffline);
     if (channel) {
       supabase.removeChannel(channel);
+    }
+    if (sharesChannel) {
+      supabase.removeChannel(sharesChannel);
     }
   });
 

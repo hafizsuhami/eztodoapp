@@ -4,7 +4,7 @@ This document provides guidelines for AI coding agents working in this repositor
 
 ## Project Overview
 
-- **Name**: TaskMaster - Task Management Dashboard
+- **Name**: EZTodo - It's eaasy todo
 - **Type**: React 19 SPA with TypeScript
 - **Build Tool**: Vite 6.2
 - **Styling**: Tailwind CSS (via CDN)

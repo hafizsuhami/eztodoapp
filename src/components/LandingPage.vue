@@ -135,39 +135,93 @@ defineEmits<{
 
     <!-- Features Section -->
     <section class="relative z-10 px-6 py-20 md:py-28">
-      <div class="max-w-4xl mx-auto">
+      <div class="max-w-5xl mx-auto">
         <h2 class="text-2xl md:text-4xl font-bold text-center text-slate-800 dark:text-white mb-4">
           Why you'll love it 💕
         </h2>
         <p class="text-slate-600 dark:text-slate-400 text-center mb-16 text-lg">
-          (Besides the obvious good vibes)
+          Packed with features you'll actually use
         </p>
-        
-        <div class="grid md:grid-cols-3 gap-8">
-          <!-- Feature 1 -->
+
+        <div class="grid md:grid-cols-3 gap-6">
+          <!-- Feature: Natural Language Input -->
+          <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border-2 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 hover:rotate-1">
+            <div class="text-4xl mb-4">🪄</div>
+            <h3 class="text-lg font-bold text-slate-800 dark:text-white mb-2">Smart Input</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+              Type naturally: "Meeting tomorrow 3pm #work" — dates, times & categories auto-detected!
+            </p>
+          </div>
+
+          <!-- Feature: Malay Language -->
+          <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border-2 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 hover:-rotate-1">
+            <div class="text-4xl mb-4">🇲🇾</div>
+            <h3 class="text-lg font-bold text-slate-800 dark:text-white mb-2">Bahasa Malaysia</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+              Full Malay support! "Beli susu esok pagi" works perfectly, even SMS shortforms.
+            </p>
+          </div>
+
+          <!-- Feature: Push Reminders -->
+          <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border-2 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 hover:rotate-1">
+            <div class="text-4xl mb-4">🔔</div>
+            <h3 class="text-lg font-bold text-slate-800 dark:text-white mb-2">Push Reminders</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+              Never miss a deadline! Get notifications on phone, desktop, even when app is closed.
+            </p>
+          </div>
+
+          <!-- Feature: Share Tasks -->
+          <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border-2 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 hover:-rotate-1">
+            <div class="text-4xl mb-4">🤝</div>
+            <h3 class="text-lg font-bold text-slate-800 dark:text-white mb-2">Share Tasks</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+              Invite via email or share link. Great for grocery lists, trip plans & family tasks.
+            </p>
+          </div>
+
+          <!-- Feature: Real-time Sync -->
           <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border-2 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 hover:rotate-1">
             <div class="text-4xl mb-4">🔄</div>
-            <h3 class="text-lg font-bold text-slate-800 dark:text-white mb-2">Syncs magically</h3>
+            <h3 class="text-lg font-bold text-slate-800 dark:text-white mb-2">Real-time Sync</h3>
             <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-              Phone, laptop, tablet — your tasks are everywhere you are.
+              Changes appear instantly across all your devices. Phone, laptop, tablet — always in sync.
             </p>
           </div>
-          
-          <!-- Feature 2 -->
+
+          <!-- Feature: Offline Mode -->
           <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border-2 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 hover:-rotate-1">
             <div class="text-4xl mb-4">✈️</div>
-            <h3 class="text-lg font-bold text-slate-800 dark:text-white mb-2">Works offline</h3>
+            <h3 class="text-lg font-bold text-slate-800 dark:text-white mb-2">Works Offline</h3>
             <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-              No wifi? No problem! Add tasks anytime, anywhere.
+              No wifi? No problem! Add and check off tasks anytime — syncs when you're back online.
             </p>
           </div>
-          
-          <!-- Feature 3 -->
+
+          <!-- Feature: Voice Input -->
           <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border-2 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 hover:rotate-1">
-            <div class="text-4xl mb-4">🌙</div>
-            <h3 class="text-lg font-bold text-slate-800 dark:text-white mb-2">Dark mode</h3>
+            <div class="text-4xl mb-4">🎤</div>
+            <h3 class="text-lg font-bold text-slate-800 dark:text-white mb-2">Voice Input</h3>
             <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-              Easy on the eyes at 2am. We don't judge.
+              Speak your tasks! Tap the mic and let your voice do the typing.
+            </p>
+          </div>
+
+          <!-- Feature: Subtasks -->
+          <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border-2 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 hover:-rotate-1">
+            <div class="text-4xl mb-4">📋</div>
+            <h3 class="text-lg font-bold text-slate-800 dark:text-white mb-2">Subtasks</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+              Break big tasks into smaller steps. See progress as you check things off.
+            </p>
+          </div>
+
+          <!-- Feature: Themes -->
+          <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border-2 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 hover:rotate-1">
+            <div class="text-4xl mb-4">🎨</div>
+            <h3 class="text-lg font-bold text-slate-800 dark:text-white mb-2">Beautiful Themes</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+              Light, dark, dim, sepia & more. Find your perfect vibe for any time of day.
             </p>
           </div>
         </div>

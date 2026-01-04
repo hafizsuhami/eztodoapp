@@ -5,7 +5,7 @@ export interface CategoryOption {
 }
 
 export type CategoryId = string;
-export type TaskStatus = 'today' | 'upcoming' | 'all' | 'completed';
+export type TaskStatus = 'today' | 'all' | 'completed' | 'shared';
 export type ThemeName = keyof typeof import('./constants').THEME_PRESETS;
 
 export interface Subtask {

@@ -278,8 +278,8 @@ const handleCategoryKeydown = (event: KeyboardEvent, catId: CategoryId) => {
             {{ task.due_date }}
           </span>
 
-          <!-- Category Badge -->
-          <div class="relative" ref="categoryMenuRef">
+          <!-- Category Badge (hidden for shared tasks - categories don't apply) -->
+          <div v-if="!isSharedWithMe" class="relative" ref="categoryMenuRef">
             <button
               @click="isCategoryOpen = !isCategoryOpen"
               :aria-expanded="isCategoryOpen"

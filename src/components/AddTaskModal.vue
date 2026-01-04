@@ -2,6 +2,7 @@
 import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import type { CategoryOption, CategoryId, Subtask } from '../types';
 import { usePushNotifications } from '../composables/usePushNotifications';
+import { parseTaskInput, formatParsedDate } from '../lib/parseTaskInput';
 
 const props = defineProps<{
   isOpen: boolean;
@@ -27,6 +28,23 @@ const isListening = ref(false);
 const modalRef = ref<HTMLDivElement | null>(null);
 const titleInputRef = ref<HTMLInputElement | null>(null);
 let recognition: any = null;
+
+// NLI: Track if fields were auto-filled (to avoid overwriting manual changes)
+const autoFilledCategory = ref(false);
+const autoFilledDate = ref(false);
+const autoFilledReminder = ref(false);
+
+// NLI: Parse the title input for natural language
+const parsedTask = computed(() => {
+  if (!title.value.trim()) return null;
+  return parseTaskInput(title.value, props.categories);
+});
+
+// NLI: Show preview only when we detect something
+const showNLIPreview = computed(() => {
+  if (!parsedTask.value) return false;
+  return parsedTask.value.dueDate || parsedTask.value.categoryId || parsedTask.value.hasReminder;
+});
 
 const defaultCategoryId = computed(() => props.categories[0]?.id || '');
 
@@ -62,7 +80,11 @@ watch(() => props.isOpen, async (open) => {
     reminderDate.value = '';
     reminderTime.value = '09:00';
     isListening.value = false;
-    
+    // Reset NLI auto-fill tracking
+    autoFilledCategory.value = false;
+    autoFilledDate.value = false;
+    autoFilledReminder.value = false;
+
     previousActiveElement = document.activeElement as HTMLElement;
     await nextTick();
     titleInputRef.value?.focus();
@@ -70,6 +92,46 @@ watch(() => props.isOpen, async (open) => {
   } else {
     document.removeEventListener('keydown', trapFocus);
     previousActiveElement?.focus();
+  }
+});
+
+// NLI: Auto-fill fields when natural language is detected
+watch(parsedTask, (parsed) => {
+  if (!parsed) return;
+
+  // Auto-fill category if detected and not manually changed
+  if (parsed.categoryId && !autoFilledCategory.value) {
+    selectedCategory.value = parsed.categoryId;
+    autoFilledCategory.value = true;
+  }
+
+  // Auto-fill due date if detected and not manually changed
+  if (parsed.dueDate && !autoFilledDate.value) {
+    const dateStr = parsed.dueDate.toISOString().split('T')[0];
+    dueDate.value = dateStr;
+    autoFilledDate.value = true;
+  }
+
+  // Auto-enable reminder if detected and not manually changed
+  if (parsed.hasReminder && !autoFilledReminder.value && !reminderEnabled.value) {
+    reminderEnabled.value = true;
+    autoFilledReminder.value = true;
+    // Set reminder date to due date or today
+    if (dueDate.value) {
+      reminderDate.value = dueDate.value;
+    } else if (parsed.dueDate) {
+      reminderDate.value = parsed.dueDate.toISOString().split('T')[0];
+    } else {
+      reminderDate.value = new Date().toISOString().split('T')[0];
+    }
+    // Set time from parsed date if available
+    if (parsed.dueDate) {
+      const hours = parsed.dueDate.getHours();
+      const minutes = parsed.dueDate.getMinutes();
+      if (hours !== 0 || minutes !== 0) {
+        reminderTime.value = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      }
+    }
   }
 });
 
@@ -159,6 +221,9 @@ const handleAddSubtaskKeydown = (e: KeyboardEvent) => {
 const handleSubmit = () => {
   if (!title.value.trim()) return;
 
+  // Use parsed clean title if NLI detected something, otherwise use raw title
+  const finalTitle = parsedTask.value?.title || title.value.trim();
+
   const subtaskTitles = subtasks.value
     .filter(s => s.title.trim())
     .map(s => s.title);
@@ -169,7 +234,7 @@ const handleSubmit = () => {
     reminderAt = new Date(`${reminderDate.value}T${reminderTime.value}`).toISOString();
   }
 
-  emit('save', title.value, subtaskTitles, selectedCategory.value, dueDate.value || 'No Due Date', reminderAt);
+  emit('save', finalTitle, subtaskTitles, selectedCategory.value, dueDate.value || 'No Due Date', reminderAt);
   emit('close');
 };
 
@@ -251,6 +316,32 @@ const handleReminderToggle = async () => {
               </button>
             </div>
             <p v-if="isListening" class="text-xs text-primary font-medium ml-1 animate-pulse" role="status">Listening...</p>
+
+            <!-- NLI Preview -->
+            <div
+              v-if="showNLIPreview && parsedTask"
+              class="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-xl text-sm space-y-1.5"
+            >
+              <p class="text-xs font-medium text-primary/70 uppercase tracking-wide">Detected</p>
+              <div class="flex flex-wrap gap-2">
+                <span v-if="parsedTask.title" class="inline-flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-slate-800 rounded-lg text-slate-700 dark:text-slate-200 shadow-sm">
+                  <span class="material-symbols-outlined text-[14px] text-slate-400">edit</span>
+                  {{ parsedTask.title }}
+                </span>
+                <span v-if="parsedTask.dueDate" class="inline-flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-slate-800 rounded-lg text-slate-700 dark:text-slate-200 shadow-sm">
+                  <span class="material-symbols-outlined text-[14px] text-blue-500">calendar_today</span>
+                  {{ formatParsedDate(parsedTask.dueDate) }}
+                </span>
+                <span v-if="parsedTask.categoryName" class="inline-flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-slate-800 rounded-lg text-slate-700 dark:text-slate-200 shadow-sm">
+                  <span class="material-symbols-outlined text-[14px] text-green-500">label</span>
+                  {{ parsedTask.categoryName }}
+                </span>
+                <span v-if="parsedTask.hasReminder" class="inline-flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-slate-800 rounded-lg text-slate-700 dark:text-slate-200 shadow-sm">
+                  <span class="material-symbols-outlined text-[14px] text-amber-500">notifications</span>
+                  Reminder
+                </span>
+              </div>
+            </div>
           </div>
 
           <div class="flex flex-col gap-1.5">

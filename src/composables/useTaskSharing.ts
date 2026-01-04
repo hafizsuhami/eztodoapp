@@ -43,18 +43,29 @@ export function useTaskSharing() {
       }
 
       // Map the data to include user info where available
-      shares.value = (data || []).map(share => {
-        const profile = share.shared_with_id ? profilesMap[share.shared_with_id] : null;
-        return {
-          ...share,
-          shared_user: share.shared_with_id ? {
-            id: share.shared_with_id,
-            email: profile?.email || share.shared_with_email || '',
-            name: profile?.name || share.shared_with_email?.split('@')[0] || '',
-            avatar: profile?.avatar_url || ''
-          } : undefined
-        };
-      });
+      // Filter out link-only shares (share_token but no shared_with_id and no shared_with_email)
+      // These are just reusable link templates, not actual shares with people
+      shares.value = (data || [])
+        .filter(share => {
+          // Keep if it has a shared_with_id (accepted by someone)
+          if (share.shared_with_id) return true;
+          // Keep if it has a shared_with_email (email invite)
+          if (share.shared_with_email) return true;
+          // Filter out link-only templates (share_token but no user/email)
+          return false;
+        })
+        .map(share => {
+          const profile = share.shared_with_id ? profilesMap[share.shared_with_id] : null;
+          return {
+            ...share,
+            shared_user: share.shared_with_id ? {
+              id: share.shared_with_id,
+              email: profile?.email || share.shared_with_email || '',
+              name: profile?.name || share.shared_with_email?.split('@')[0] || '',
+              avatar: profile?.avatar_url || ''
+            } : undefined
+          };
+        });
     } catch (e) {
       error.value = 'Failed to load shares';
       console.error(e);

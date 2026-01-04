@@ -1,8 +1,8 @@
 # Feature Roadmap: Task Sharing
 
-> **Date**: January 2026  
-> **Status**: Planning  
-> **Commitment Level**: Experiment
+> **Date**: January 2026
+> **Status**: ✅ Implemented (v1.0.2)
+> **Commitment Level**: Bet
 
 ---
 
@@ -762,8 +762,8 @@ CREATE POLICY "Users can delete their own shares" ON task_shares
 
 # Feature Roadmap: Task Reminders (Push Notifications)
 
-> **Date**: January 2026  
-> **Status**: Implemented (WIP Branch)  
+> **Date**: January 2026
+> **Status**: ✅ Implemented (v1.0.2)
 > **Commitment Level**: Bet
 
 ---
@@ -1181,5 +1181,462 @@ Only shown when `reminder_at` exists and `reminder_sent` is false.
 
 ---
 
-*Document maintained by: Development Team*  
+# Feature Roadmap: Natural Language Input (NLI)
+
+> **Date**: January 2026
+> **Status**: ✅ Implemented (v1.1.0)
+> **Commitment Level**: Bet
+
+---
+
+## Executive Summary
+
+Natural Language Input allows users to create tasks using conversational text. The parser extracts dates, times, categories, and reminders automatically from the input, supporting both English and Malay (Bahasa Malaysia) including SMS shortforms.
+
+---
+
+## What Was Built
+
+| Component | Description |
+|-----------|-------------|
+| **parseTaskInput.ts** | Core parser with chrono-node + custom Malay parser |
+| **Malay Date Parser** | Full Bahasa Malaysia support with SMS shortforms |
+| **AddTaskModal.vue** | Live preview + auto-fill for parsed values |
+| **App.vue Quick Add** | NLI support in header quick-add input |
+| **Reminder Detection** | Multiple patterns: `!remind`, `ingatkan`, etc. |
+
+---
+
+## Supported Syntax
+
+### English (via chrono-node)
+
+| Pattern | Examples |
+|---------|----------|
+| Relative dates | `tomorrow`, `next friday`, `in 3 days` |
+| Specific dates | `jan 15`, `march 3rd`, `2026-01-15` |
+| Times | `3pm`, `9:30am`, `at noon` |
+| Combined | `next monday at 2pm` |
+
+### Malay (Custom Parser)
+
+| Type | Full Form | SMS Shortform |
+|------|-----------|---------------|
+| Tomorrow | `esok` | `esk`, `bsk` |
+| Day after | `lusa` | `lsa` |
+| Yesterday | `semalam` | `smlm` |
+| Today | `hari ini` | `hr ni`, `hrni` |
+| Next week | `minggu depan` | `mggu dpn` |
+| Next month | `bulan depan` | `bln dpn` |
+| Days | `isnin`, `selasa`... | `isn`, `sls`... |
+| Morning | `pagi` | `pg`, `pgi` |
+| Afternoon | `petang` | `ptg` |
+| Night | `malam` | `mlm` |
+| Time | `pukul 3` | `pkl 3`, `jm 3` |
+
+### Categories & Reminders
+
+| Type | Patterns |
+|------|----------|
+| Category | `#work`, `#personal`, `#family` |
+| Reminder (prefix) | `!reminder`, `!remind`, `!ingat`, `@remind` |
+| Reminder (natural) | `remind me`, `ingatkan`, `ingatkan saya` |
+
+---
+
+## Technical Architecture
+
+```
+User Input: "Beli susu esk pgi #personal ingatkan"
+                          │
+                          ▼
+              ┌───────────────────────┐
+              │   parseTaskInput()    │
+              │  ├─ Extract #category │
+              │  ├─ Extract reminder  │
+              │  ├─ Try Malay parser  │
+              │  └─ Fallback: chrono  │
+              └───────────────────────┘
+                          │
+                          ▼
+              ┌───────────────────────┐
+              │  ParsedTask Result    │
+              │  ├─ title: "Beli susu"│
+              │  ├─ dueDate: tomorrow │
+              │  ├─ category: personal│
+              │  └─ hasReminder: true │
+              └───────────────────────┘
+```
+
+### Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `chrono-node` | ^2.9.0 | English date parsing |
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `src/lib/parseTaskInput.ts` | Core parser (~400 lines) |
+| `src/components/AddTaskModal.vue` | UI integration |
+| `src/App.vue` | Quick-add integration |
+
+---
+
+## UX Design
+
+### AddTaskModal Preview
+
+```
+┌─────────────────────────────────────────────────┐
+│  Task title                                     │
+│  ┌───────────────────────────────────────────┐  │
+│  │ Meeting isnin dpn ptg #work remind me     │  │
+│  └───────────────────────────────────────────┘  │
+│                                                 │
+│  ┌─ Detected ─────────────────────────────────┐ │
+│  │ 📝 Meeting                                 │ │
+│  │ 📅 Mon, Jan 6, 3:00 PM                     │ │
+│  │ 🏷️ Work                                    │ │
+│  │ 🔔 Reminder                                │ │
+│  └────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────┘
+```
+
+### Quick Add Preview
+
+```
+┌──────────────────────────────────────────────────┐
+│ 📝 Buy groceries esk pgi #personal               │
+├──────────────────────────────────────────────────┤
+│ Detected: 📅 Tomorrow, 8:00 AM  🏷️ Personal     │
+└──────────────────────────────────────────────────┘
+```
+
+---
+
+## Future Enhancements
+
+| Enhancement | Effort | Value |
+|-------------|--------|-------|
+| **Recurring patterns** | Medium | "every monday", "setiap isnin" |
+| **Priority detection** | Low | "!high", "!urgent", "penting" |
+| **Location parsing** | Medium | "@office", "di pejabat" |
+| **Duration estimation** | Medium | "30 min", "2 hours" |
+| **Indonesian support** | Low | Similar to Malay with spelling variants |
+
+---
+
+# Feature Roadmap: What's New Dialog
+
+> **Date**: January 2026
+> **Status**: ✅ Implemented (v1.1.0)
+> **Commitment Level**: Standard
+
+---
+
+## Executive Summary
+
+A friendly changelog dialog that shows users new features after app updates. Dismissal state is persisted to Supabase user metadata to prevent repeated prompts.
+
+---
+
+## What Was Built
+
+| Component | Description |
+|-----------|-------------|
+| **changelog.ts** | Version entries with features list |
+| **WhatsNewModal.vue** | Animated modal with feature cards |
+| **useAuth.ts** | Extended to track `lastSeenChangelog` |
+| **Supabase metadata** | Stores dismissed version persistently |
+
+---
+
+## Technical Architecture
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   User Login    │────▶│  Check Version  │────▶│  Show Modal?    │
+│                 │     │  lastSeenChange │     │  compare vers.  │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                                                        │
+                              ┌──────────────────────────┤
+                              ▼                          ▼
+                    ┌─────────────────┐        ┌─────────────────┐
+                    │  No new version │        │  Show WhatsNew  │
+                    │  (do nothing)   │        │  Modal          │
+                    └─────────────────┘        └─────────────────┘
+                                                        │
+                                                        ▼
+                                               ┌─────────────────┐
+                                               │  On Dismiss:    │
+                                               │  Save to DB +   │
+                                               │  localStorage   │
+                                               └─────────────────┘
+```
+
+### Storage Strategy
+
+| Storage | Purpose |
+|---------|---------|
+| **Supabase user_metadata** | Primary - persists across devices |
+| **localStorage** | Fallback - works offline |
+
+---
+
+## Changelog Data Structure
+
+```typescript
+// src/lib/changelog.ts
+interface ChangelogEntry {
+  version: string      // Semantic version "1.1.0"
+  date: string         // ISO date "2026-01-03"
+  title: string        // Friendly name "Smart Task Input"
+  features: {
+    icon: string       // Material symbol name
+    title: string      // Feature name
+    description: string // Brief explanation
+  }[]
+}
+```
+
+### Adding New Changelog Entries
+
+```typescript
+// Add at TOP of CHANGELOG array (newest first)
+{
+  version: '1.2.0',
+  date: '2026-01-15',
+  title: 'Recurring Tasks',
+  features: [
+    {
+      icon: 'repeat',
+      title: 'Recurring Tasks',
+      description: 'Set tasks to repeat daily, weekly, or monthly.'
+    }
+  ]
+}
+```
+
+---
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `src/lib/changelog.ts` | Changelog data & version helpers |
+| `src/components/WhatsNewModal.vue` | Modal component |
+| `src/composables/useAuth.ts` | Extended with lastSeenChangelog |
+| `src/App.vue` | Modal integration |
+
+---
+
+## UX Design
+
+```
+┌────────────────────────────────────────┐
+│  ✨ What's New                         │
+│  ┌──────────────────────────────────┐  │
+│  │  Smart Task Input        v1.1.0 │  │
+│  └──────────────────────────────────┘  │
+│                                        │
+│  🪄 Natural Language Input             │
+│     Type tasks naturally!              │
+│                                        │
+│  🌐 Malay Language Support             │
+│     Full Bahasa Malaysia + SMS slang   │
+│                                        │
+│  🔔 Smart Reminders                    │
+│     Just type "remind me"              │
+│                                        │
+│            [Skip]  [Got it!]           │
+└────────────────────────────────────────┘
+```
+
+### Features
+
+- **Gradient header** with version info
+- **Feature cards** with icons
+- **Pagination dots** for multiple entries
+- **Skip button** for immediate dismiss
+- **Smooth animations** for open/close
+
+---
+
+## Future Enhancements
+
+| Enhancement | Effort | Value |
+|-------------|--------|-------|
+| **Feature highlights** | Low | Animate specific UI elements |
+| **Interactive tour** | Medium | Step-by-step feature walkthrough |
+| **Release notes link** | Low | Link to full changelog page |
+| **Image/GIF support** | Low | Visual demos in features |
+
+---
+
+# Feature Summary: Current App Capabilities
+
+> **Date**: January 2026
+> **Version**: v1.1.0+
+
+---
+
+## Complete Feature List
+
+This section provides a comprehensive overview of all features currently implemented in EZTodo.
+
+### Core Task Management
+
+| Feature | Description |
+|---------|-------------|
+| **Task CRUD** | Create, read, update, delete tasks with full validation |
+| **Subtasks** | Break tasks into smaller steps with progress tracking (e.g., "2/5 completed") |
+| **Due Dates** | Date picker with visual badges: Overdue (red), Today (amber), future dates |
+| **Categories** | Custom categories with color picker, filtering, and default starter categories |
+
+### Smart Input (Natural Language Processing)
+
+| Feature | Description |
+|---------|-------------|
+| **English NLI** | "tomorrow 3pm", "next friday", "in 3 days", "jan 15" via chrono-node |
+| **Malay NLI** | "esok pagi", "isnin depan", "lusa petang" with full Bahasa Malaysia support |
+| **SMS Shortforms** | "esk", "smlm", "mggu dpn", "ptg", "pkl 3" for quick input |
+| **Category Detection** | `#work`, `#personal` extracted from input |
+| **Reminder Detection** | "remind me", "!reminder", "ingatkan" triggers reminder |
+| **Live Preview** | Real-time display of parsed date, category, reminder as user types |
+| **Voice Input** | Microphone button with Web Speech API (speech-to-text) |
+
+### Push Notifications & Reminders
+
+| Feature | Description |
+|---------|-------------|
+| **OneSignal Integration** | Cross-platform push notifications |
+| **Task Reminders** | Date/time picker with purple reminder badge on cards |
+| **iOS PWA Support** | Detection + installation prompt for iOS users |
+| **Edge Function** | `send-reminders` processes due reminders every minute via pg_cron |
+
+### Task Sharing & Collaboration
+
+| Feature | Description |
+|---------|-------------|
+| **Email Invites** | Share with specific users by email address |
+| **Share Links** | Generate reusable URLs with configurable expiration (1/7/30 days or never) |
+| **WhatsApp Share** | Quick share button with pre-filled message |
+| **Recipient Management** | View active shares, status tracking, revoke access |
+| **Shared Task Reception** | Accept via `/share/{token}` route, preview before accepting |
+| **Completion Notifications** | Owner notified when shared user completes task |
+| **Real-time Updates** | Broadcast channel pushes changes to all recipients |
+
+### Synchronization & Offline
+
+| Feature | Description |
+|---------|-------------|
+| **Real-time Sync** | Supabase Realtime for instant cross-device updates |
+| **Sync Status Indicator** | Visual component showing synced/syncing/offline/error states |
+| **Offline Queue** | LocalStorage queue for offline operations, auto-syncs on reconnect |
+| **Task Caching** | LocalStorage cache for offline viewing and graceful degradation |
+
+### Authentication & User Management
+
+| Feature | Description |
+|---------|-------------|
+| **Google OAuth** | Single sign-on with persistent sessions |
+| **User Profile** | Name, avatar, theme preference stored in Supabase |
+| **Changelog Tracking** | `lastSeenChangelog` stored in user metadata for What's New modal |
+
+### User Interface & Themes
+
+| Feature | Description |
+|---------|-------------|
+| **7 Theme Presets** | Light, Dark, Dim, Sepia, Vibrant Purple, Blush, Playful Kids |
+| **Mobile Responsive** | Bottom-sheet modals on mobile, centered on desktop |
+| **PWA Support** | Install prompts, standalone mode, service worker detection |
+| **Accessibility** | ARIA labels, focus management, keyboard navigation |
+
+### UI Components
+
+| Component | Purpose |
+|-----------|---------|
+| **AddTaskModal** | Full task creation with NLI preview, voice input, reminder picker |
+| **EditTaskModal** | Modify existing tasks (read-only for shared tasks) |
+| **ShareTaskModal** | Email/link sharing with recipient management |
+| **CategoryManagerModal** | Create, edit, delete, and color-pick categories |
+| **WhatsNewModal** | Version-based changelog with animated feature cards |
+| **IOSInstallPrompt** | Bottom sheet guiding iOS PWA installation |
+| **Toast Notifications** | Success/error/info feedback system |
+
+### Visual Indicators
+
+| Indicator | Description |
+|-----------|-------------|
+| **Completion Animation** | Animated checkmark with bounce effect |
+| **Due Date Badges** | Color-coded: Overdue (red), Today (amber), Future (styled) |
+| **Reminder Badge** | Purple badge with formatted time: "Today 9:00 AM" |
+| **Shared Task Badge** | Blue badge with owner avatar: "Shared by [Name]" |
+| **Category Dots** | Color dots matching category in dropdowns |
+
+---
+
+## Technical Stack
+
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | Vue 3 + TypeScript + Vite |
+| **Styling** | Tailwind CSS |
+| **Backend** | Supabase (PostgreSQL + Auth + Realtime + Edge Functions) |
+| **Push Notifications** | OneSignal |
+| **Date Parsing** | chrono-node + custom Malay parser |
+| **Deployment** | Cloudflare Pages |
+
+---
+
+## File Structure Overview
+
+```
+src/
+├── components/
+│   ├── AddTaskModal.vue
+│   ├── EditTaskModal.vue
+│   ├── ShareTaskModal.vue
+│   ├── CategoryManagerModal.vue
+│   ├── WhatsNewModal.vue
+│   ├── IOSInstallPrompt.vue
+│   ├── TaskCard.vue
+│   ├── LandingPage.vue
+│   └── ...
+├── composables/
+│   ├── useTasks.ts          # Core task CRUD + real-time sync
+│   ├── useTaskSharing.ts    # Share functionality
+│   ├── useAuth.ts           # Authentication + user metadata
+│   ├── useCategories.ts     # Category management
+│   └── usePushNotifications.ts  # OneSignal integration
+├── lib/
+│   ├── parseTaskInput.ts    # NLI parser (English + Malay)
+│   └── changelog.ts         # Version changelog data
+├── types.ts                 # TypeScript interfaces
+└── App.vue                  # Main app shell
+
+supabase/
+├── functions/
+│   ├── send-reminders/      # Push notification sender
+│   └── notify-task-completion/  # Shared task completion alerts
+└── migrations/
+    └── *.sql                # Database schema
+```
+
+---
+
+## Version History
+
+| Version | Date | Highlights |
+|---------|------|------------|
+| **v1.0.0** | Dec 2025 | Initial release: Tasks, categories, offline sync |
+| **v1.0.1** | Jan 2026 | Task sharing (email + link), completion notifications |
+| **v1.0.2** | Jan 2026 | Push reminders (OneSignal), iOS PWA support |
+| **v1.1.0** | Jan 2026 | Natural Language Input, Malay support, What's New modal |
+
+---
+
+*Document maintained by: Development Team*
 *Last updated: January 2026*

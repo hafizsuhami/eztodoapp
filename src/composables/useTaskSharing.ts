@@ -15,6 +15,7 @@ export function useTaskSharing() {
     error.value = null;
 
     try {
+      // Fetch shares first
       const { data, error: fetchError } = await supabase
         .from('task_shares')
         .select('*')
@@ -24,16 +25,36 @@ export function useTaskSharing() {
 
       if (fetchError) throw fetchError;
 
+      // Fetch profile info for users who have accepted
+      const userIds = (data || [])
+        .filter(s => s.shared_with_id)
+        .map(s => s.shared_with_id);
+
+      let profilesMap: Record<string, any> = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, name, email, avatar_url')
+          .in('id', userIds);
+
+        if (profiles) {
+          profilesMap = Object.fromEntries(profiles.map(p => [p.id, p]));
+        }
+      }
+
       // Map the data to include user info where available
-      shares.value = (data || []).map(share => ({
-        ...share,
-        shared_user: share.shared_with_id ? {
-          id: share.shared_with_id,
-          email: share.shared_with_email || '',
-          name: share.shared_with_email?.split('@')[0] || 'User',
-          avatar: ''
-        } : undefined
-      }));
+      shares.value = (data || []).map(share => {
+        const profile = share.shared_with_id ? profilesMap[share.shared_with_id] : null;
+        return {
+          ...share,
+          shared_user: share.shared_with_id ? {
+            id: share.shared_with_id,
+            email: profile?.email || share.shared_with_email || '',
+            name: profile?.name || share.shared_with_email?.split('@')[0] || '',
+            avatar: profile?.avatar_url || ''
+          } : undefined
+        };
+      });
     } catch (e) {
       error.value = 'Failed to load shares';
       console.error(e);
@@ -43,7 +64,7 @@ export function useTaskSharing() {
   };
 
   // Create email invite
-  const shareByEmail = async (taskId: string, email: string): Promise<TaskShare | null> => {
+  const shareByEmail = async (taskId: string, email: string, notifyOnComplete: boolean = true): Promise<TaskShare | null> => {
     if (!taskId || !email) return null;
 
     loading.value = true;
@@ -60,7 +81,8 @@ export function useTaskSharing() {
           owner_id: userData.user.id,
           shared_with_email: email.toLowerCase().trim(),
           permission: 'edit',
-          status: 'pending'
+          status: 'pending',
+          notify_on_complete: notifyOnComplete
         })
         .select()
         .single();
@@ -83,7 +105,7 @@ export function useTaskSharing() {
   };
 
   // Generate shareable link (or return existing one)
-  const generateShareLink = async (taskId: string, expiresInDays?: number): Promise<ShareLinkResponse | null> => {
+  const generateShareLink = async (taskId: string, expiresInDays?: number, notifyOnComplete: boolean = true): Promise<ShareLinkResponse | null> => {
     if (!taskId) return null;
 
     loading.value = true;
@@ -132,7 +154,8 @@ export function useTaskSharing() {
           share_token: token,
           permission: 'edit',
           status: 'pending',
-          expires_at: expiresAt
+          expires_at: expiresAt,
+          notify_on_complete: notifyOnComplete
         })
         .select()
         .single();

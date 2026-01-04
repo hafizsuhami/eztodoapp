@@ -13,11 +13,12 @@ import {
 
 export type SyncStatus = 'synced' | 'syncing' | 'offline' | 'error';
 
-export function useTasks(userId: () => string | undefined) {
+export function useTasks(userId: () => string | undefined, userName?: () => string | undefined) {
   const tasks = ref<Task[]>([]);
   const loading = ref(true);
   const error = ref<string | null>(null);
   const syncStatus = ref<SyncStatus>('synced');
+  const sharedTaskIds = ref<Set<string>>(new Set());
 
   // Fetch tasks from server (owned + shared)
   const fetchTasks = async () => {
@@ -74,6 +75,8 @@ export function useTasks(userId: () => string | undefined) {
       ];
 
       tasks.value = allTasks;
+      // Track shared task IDs for real-time broadcast filtering
+      sharedTaskIds.value = new Set(sharedTasks.map(t => t.id));
       setCachedTasks(tasks.value);
       syncStatus.value = 'synced';
       error.value = null;
@@ -138,6 +141,57 @@ export function useTasks(userId: () => string | undefined) {
     await fetchTasks();
   };
 
+  // Broadcast task updates to shared task recipients
+  const broadcastTaskUpdate = async (taskId: string, taskData: Task | null, eventType: 'UPDATE' | 'DELETE') => {
+    try {
+      // Check if task has active shares
+      const { data: shares } = await supabase
+        .from('task_shares')
+        .select('id')
+        .eq('task_id', taskId)
+        .eq('status', 'accepted')
+        .limit(1);
+
+      if (shares && shares.length > 0) {
+        // Task is shared, broadcast the update
+        const channel = supabase.channel('shared-tasks-broadcast');
+        await channel.send({
+          type: 'broadcast',
+          event: 'task-updated',
+          payload: {
+            task_id: taskId,
+            updated_task: taskData,
+            event_type: eventType
+          }
+        });
+      }
+    } catch (e) {
+      // Non-critical: broadcast failure shouldn't affect the main operation
+      console.warn('Failed to broadcast task update:', e);
+    }
+  };
+
+  // Notify task owner when a shared user completes their task
+  const notifyOwnerOfCompletion = async (taskId: string, taskTitle: string) => {
+    try {
+      const completedByName = userName?.() || 'Someone';
+      const completedByUserId = userId();
+      if (!completedByUserId) return;
+
+      await supabase.functions.invoke('notify-task-completion', {
+        body: {
+          task_id: taskId,
+          task_title: taskTitle,
+          completed_by_name: completedByName,
+          completed_by_user_id: completedByUserId
+        }
+      });
+    } catch (e) {
+      // Non-critical: notification failure shouldn't affect the main operation
+      console.warn('Failed to notify owner of task completion:', e);
+    }
+  };
+
   // CRUD Operations
   const createTask = async (data: Omit<Task, 'id' | 'user_id'>) => {
     const id = userId();
@@ -194,6 +248,9 @@ export function useTasks(userId: () => string | undefined) {
   };
 
   const updateTask = async (taskId: string, data: Partial<Task>) => {
+    // Get task before update to check if it's shared and completion status changed
+    const taskBeforeUpdate = tasks.value.find(t => t.id === taskId);
+
     // Optimistic update
     tasks.value = tasks.value.map(t => t.id === taskId ? { ...t, ...data } : t);
     setCachedTasks(tasks.value);
@@ -201,13 +258,29 @@ export function useTasks(userId: () => string | undefined) {
     if (isOnline() && !taskId.startsWith('temp_')) {
       try {
         syncStatus.value = 'syncing';
-        const { error: updateError } = await supabase
+        const { data: updatedTask, error: updateError } = await supabase
           .from('tasks')
           .update(data)
-          .eq('id', taskId);
-        
+          .eq('id', taskId)
+          .select()
+          .single();
+
         if (updateError) throw updateError;
         syncStatus.value = 'synced';
+
+        // Broadcast update to shared task recipients
+        if (updatedTask) {
+          broadcastTaskUpdate(taskId, updatedTask, 'UPDATE');
+        }
+
+        // Notify owner if a shared user completed the task
+        if (
+          taskBeforeUpdate?.is_shared_with_me && // Task is shared with current user (not owned)
+          data.is_completed === true && // Being marked as complete
+          !taskBeforeUpdate.is_completed // Was not complete before
+        ) {
+          notifyOwnerOfCompletion(taskId, taskBeforeUpdate.title);
+        }
       } catch (e) {
         console.error('Failed to update task:', e);
         addToQueue({ type: 'update', recordId: taskId, data });
@@ -227,11 +300,16 @@ export function useTasks(userId: () => string | undefined) {
     if (isOnline() && !taskId.startsWith('temp_')) {
       try {
         syncStatus.value = 'syncing';
+
+        // Broadcast deletion to shared task recipients BEFORE deleting
+        // (cascade will remove shares, so we need to check first)
+        await broadcastTaskUpdate(taskId, null, 'DELETE');
+
         const { error: deleteError } = await supabase
           .from('tasks')
           .delete()
           .eq('id', taskId);
-        
+
         if (deleteError) throw deleteError;
         syncStatus.value = 'synced';
       } catch (e) {
@@ -262,6 +340,8 @@ export function useTasks(userId: () => string | undefined) {
   const handleOnline = () => {
     syncStatus.value = 'syncing';
     processQueue();
+    // Re-establish broadcast subscription after coming back online
+    setupBroadcastSubscription();
   };
 
   const handleOffline = () => {
@@ -271,6 +351,40 @@ export function useTasks(userId: () => string | undefined) {
   // Setup real-time subscription
   let channel: RealtimeChannel | null = null;
   let sharesChannel: RealtimeChannel | null = null;
+  let broadcastChannel: RealtimeChannel | null = null;
+
+  // Setup broadcast subscription for shared task updates
+  const setupBroadcastSubscription = () => {
+    if (broadcastChannel) return;
+
+    broadcastChannel = supabase
+      .channel('shared-tasks-broadcast')
+      .on('broadcast', { event: 'task-updated' }, (payload) => {
+        const { task_id, updated_task, event_type } = payload.payload as {
+          task_id: string;
+          updated_task: Task | null;
+          event_type: 'UPDATE' | 'DELETE';
+        };
+
+        // Only process if this is a task shared with us
+        if (!sharedTaskIds.value.has(task_id)) return;
+
+        if (event_type === 'UPDATE' && updated_task) {
+          // Merge update while preserving sharing metadata
+          tasks.value = tasks.value.map(t =>
+            t.id === task_id
+              ? { ...t, ...updated_task, is_shared_with_me: true, shared_by: t.shared_by }
+              : t
+          );
+          setCachedTasks(tasks.value);
+        } else if (event_type === 'DELETE') {
+          tasks.value = tasks.value.filter(t => t.id !== task_id);
+          sharedTaskIds.value.delete(task_id);
+          setCachedTasks(tasks.value);
+        }
+      })
+      .subscribe();
+  };
 
   const setupSubscription = (id: string) => {
     if (channel || !isOnline()) return;
@@ -315,12 +429,36 @@ export function useTasks(userId: () => string | undefined) {
           table: 'task_shares',
           filter: `shared_with_id=eq.${id}`
         },
-        async () => {
-          // Refetch tasks when shares change
-          await fetchTasks();
+        async (payload) => {
+          // Handle share revocation immediately
+          if (payload.eventType === 'DELETE') {
+            const revokedTaskId = (payload.old as { task_id?: string })?.task_id;
+            if (revokedTaskId) {
+              tasks.value = tasks.value.filter(t => t.id !== revokedTaskId);
+              sharedTaskIds.value.delete(revokedTaskId);
+              setCachedTasks(tasks.value);
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const shareData = payload.new as { status?: string; task_id?: string };
+            // If share was revoked, remove the task immediately
+            if (shareData.status === 'revoked' && shareData.task_id) {
+              tasks.value = tasks.value.filter(t => t.id !== shareData.task_id);
+              sharedTaskIds.value.delete(shareData.task_id);
+              setCachedTasks(tasks.value);
+            } else {
+              // Other status changes - refetch to get updated data
+              await fetchTasks();
+            }
+          } else {
+            // New share - refetch to get the new task
+            await fetchTasks();
+          }
         }
       )
       .subscribe();
+
+    // Setup broadcast subscription for shared task updates from owners
+    setupBroadcastSubscription();
   };
 
   // Watch for userId changes
@@ -356,6 +494,9 @@ export function useTasks(userId: () => string | undefined) {
     }
     if (sharesChannel) {
       supabase.removeChannel(sharesChannel);
+    }
+    if (broadcastChannel) {
+      supabase.removeChannel(broadcastChannel);
     }
   });
 

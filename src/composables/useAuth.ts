@@ -9,6 +9,7 @@ export interface AuthUser {
   name: string;
   avatar: string;
   theme?: ThemeName;
+  lastSeenChangelog?: string;
 }
 
 export function useAuth() {
@@ -23,7 +24,8 @@ export function useAuth() {
       email: supabaseUser.email || '',
       name: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || supabaseUser.email || 'User',
       avatar: supabaseUser.user_metadata?.avatar_url || supabaseUser.user_metadata?.picture || '',
-      theme: supabaseUser.user_metadata?.theme
+      theme: supabaseUser.user_metadata?.theme,
+      lastSeenChangelog: supabaseUser.user_metadata?.last_seen_changelog || localStorage.getItem('last_seen_changelog') || undefined
     };
   };
 
@@ -63,7 +65,7 @@ export function useAuth() {
     loading.value = false;
 
     // Listen for auth state changes
-    unsubscribe = supabase.auth.onAuthStateChange((_event, session) => {
+    unsubscribe = supabase.auth.onAuthStateChange(async (_event, session) => {
       user.value = extractUser(session?.user ?? null);
     });
   });

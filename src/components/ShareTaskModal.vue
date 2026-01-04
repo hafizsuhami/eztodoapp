@@ -33,6 +33,7 @@ const hasExpiry = ref(false);
 const expiryDays = ref(7);
 const copySuccess = ref(false);
 const localError = ref<string | null>(null);
+const notifyOnComplete = ref(true);
 
 const isValidEmail = computed(() => {
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -69,7 +70,7 @@ const handleEmailInvite = async () => {
   if (!props.task || !isValidEmail.value) return;
   localError.value = null;
 
-  const result = await shareByEmail(props.task.id, inviteEmail.value.trim());
+  const result = await shareByEmail(props.task.id, inviteEmail.value.trim(), notifyOnComplete.value);
   if (result) {
     inviteEmail.value = '';
   } else if (error.value) {
@@ -83,7 +84,8 @@ const handleGenerateLink = async () => {
 
   const result = await generateShareLink(
     props.task.id,
-    hasExpiry.value ? expiryDays.value : undefined
+    hasExpiry.value ? expiryDays.value : undefined,
+    notifyOnComplete.value
   );
   if (result) {
     shareLink.value = result;
@@ -119,8 +121,11 @@ const handleRevoke = async (shareId: string) => {
 };
 
 const getShareDisplayName = (share: any) => {
+  // Prefer name over email for better display
+  if (share.shared_user?.name) return share.shared_user.name;
   if (share.shared_user?.email) return share.shared_user.email;
   if (share.shared_with_email) return share.shared_with_email;
+  if (share.share_token && share.status === 'pending') return 'Link invite (pending)';
   if (share.share_token) return 'Link invite';
   return 'Unknown';
 };
@@ -138,6 +143,17 @@ watch(() => props.isOpen, async (open) => {
 
     // Fetch existing shares
     await fetchShares(props.task.id);
+
+    // Check if there's an existing active share link and pre-populate it
+    const existingLinkShare = shares.value.find(s => s.share_token && s.status !== 'revoked');
+    if (existingLinkShare && existingLinkShare.share_token) {
+      shareLink.value = {
+        share_id: existingLinkShare.id,
+        share_token: existingLinkShare.share_token,
+        share_url: `${window.location.origin}/share/${existingLinkShare.share_token}`,
+        expires_at: existingLinkShare.expires_at || null
+      };
+    }
 
     const emailInput = modalRef.value?.querySelector('input[type="email"]') as HTMLElement;
     emailInput?.focus();
@@ -265,6 +281,18 @@ onUnmounted(() => {
                     Send
                   </button>
                 </div>
+                <!-- Notify on complete toggle -->
+                <label class="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300 cursor-pointer">
+                  <input
+                    v-model="notifyOnComplete"
+                    type="checkbox"
+                    class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                  />
+                  <span class="flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[16px]">notifications</span>
+                    Notify me when they complete it
+                  </span>
+                </label>
                 <p class="text-xs text-slate-500 dark:text-slate-400">
                   They'll be able to view and edit this task when they log in.
                 </p>
@@ -331,6 +359,19 @@ onUnmounted(() => {
                       <option :value="30">30 days</option>
                     </select>
                   </div>
+
+                  <!-- Notify on complete toggle -->
+                  <label class="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300 cursor-pointer">
+                    <input
+                      v-model="notifyOnComplete"
+                      type="checkbox"
+                      class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary"
+                    />
+                    <span class="flex items-center gap-1.5">
+                      <span class="material-symbols-outlined text-[16px]">notifications</span>
+                      Notify me when they complete it
+                    </span>
+                  </label>
 
                   <button
                     @click="handleGenerateLink"

@@ -11,6 +11,7 @@ import ConfirmModal from './components/ConfirmModal.vue';
 import ToastContainer from './components/ToastContainer.vue';
 import InstallPrompt from './components/InstallPrompt.vue';
 import ShareTaskModal from './components/ShareTaskModal.vue';
+import WhatsNewModal from './components/WhatsNewModal.vue';
 import { type TaskStatus, type Subtask, type CategoryId, type Task } from './types';
 import { useAuth } from './composables/useAuth';
 import { useTasks } from './composables/useTasks';
@@ -18,6 +19,7 @@ import { useCategories } from './composables/useCategories';
 import { useToast } from './composables/useToast';
 import { usePushNotifications } from './composables/usePushNotifications';
 import { useTaskSharing } from './composables/useTaskSharing';
+import { parseTaskInput, formatParsedDate } from './lib/parseTaskInput';
 
 // Build-time version info injected by Vite
 declare const __APP_VERSION__: string;
@@ -29,7 +31,7 @@ const gitCommit = __GIT_COMMIT__;
 const buildDate = __BUILD_DATE__;
 
 // Auth composable
-const { user, loading: authLoading, isAuthenticated, loginWithGoogle, logout } = useAuth();
+const { user, loading: authLoading, isAuthenticated, loginWithGoogle, logout, updateNotifySharedCompletion } = useAuth();
 
 // Toast notifications
 const toast = useToast();
@@ -127,6 +129,7 @@ watch(
 
 // Tasks composable - reactive to user.value.id
 const getUserId = () => user.value?.id;
+const getUserName = () => user.value?.name;
 const {
   tasks,
   loading: tasksLoading,
@@ -137,7 +140,7 @@ const {
   toggleTask,
   updateTaskCategory,
   updateSubtasks
-} = useTasks(getUserId);
+} = useTasks(getUserId, getUserName);
 
 // Categories composable
 const {
@@ -160,6 +163,25 @@ const searchInputRef = ref<HTMLInputElement | null>(null);
 // Quick add state
 const quickAddTitle = ref('');
 const isQuickAddFocused = ref(false);
+
+// Clear category filter when switching to shared tab (categories don't apply)
+watch(activeTab, (newTab) => {
+  if (newTab === 'shared') {
+    categoryFilter.value = null;
+  }
+});
+
+// NLI: Parse quick-add input for natural language
+const parsedQuickAdd = computed(() => {
+  if (!quickAddTitle.value.trim()) return null;
+  return parseTaskInput(quickAddTitle.value, categories.value);
+});
+
+// NLI: Show preview for quick-add when something is detected
+const showQuickAddPreview = computed(() => {
+  if (!parsedQuickAdd.value) return false;
+  return parsedQuickAdd.value.dueDate || parsedQuickAdd.value.categoryId;
+});
 
 // Edit task modal state
 const isEditModalOpen = ref(false);
@@ -210,19 +232,25 @@ const isOverdue = (dateStr: string) => {
 const activeCount = computed(() => tasks.value.filter(t => !t.is_completed).length);
 const completedCount = computed(() => tasks.value.filter(t => t.is_completed).length);
 const todayCount = computed(() => tasks.value.filter(t => !t.is_completed && (isToday(t.due_date) || isOverdue(t.due_date))).length);
-const upcomingCount = computed(() => tasks.value.filter(t => !t.is_completed && isUpcoming(t.due_date)).length);
+const sharedCount = computed(() => tasks.value.filter(t => t.is_shared_with_me).length);
 
 const filteredTasks = computed(() => {
   return tasks.value.filter(task => {
     // 1. Status Filter
-    if (activeTab.value === 'today') {
+    if (activeTab.value === 'shared') {
+      // Show only shared tasks (both completed and incomplete)
+      if (!task.is_shared_with_me) return false;
+      // Skip category filter for shared tasks, only apply search
+      if (searchQuery.value) {
+        const query = searchQuery.value.toLowerCase();
+        return task.title.toLowerCase().includes(query) ||
+               task.subtasks?.some(s => s.title.toLowerCase().includes(query));
+      }
+      return true;
+    } else if (activeTab.value === 'today') {
       // Show overdue + today's tasks (not completed)
       if (task.is_completed) return false;
       if (!isToday(task.due_date) && !isOverdue(task.due_date)) return false;
-    } else if (activeTab.value === 'upcoming') {
-      // Show next 7 days (not completed, not today)
-      if (task.is_completed) return false;
-      if (!isUpcoming(task.due_date)) return false;
     } else if (activeTab.value === 'all') {
       // Show all incomplete tasks
       if (task.is_completed) return false;
@@ -250,7 +278,21 @@ const filteredTasks = computed(() => {
 // Group tasks by date section for better organization
 const groupedTasks = computed(() => {
   const groups: { label: string; icon: string; tasks: Task[]; color: string }[] = [];
-  
+
+  // Shared tab: group by Active and Completed
+  if (activeTab.value === 'shared') {
+    const incomplete = filteredTasks.value.filter(t => !t.is_completed);
+    const completed = filteredTasks.value.filter(t => t.is_completed);
+
+    if (incomplete.length > 0) {
+      groups.push({ label: 'Active', icon: 'task', tasks: incomplete, color: 'text-primary' });
+    }
+    if (completed.length > 0) {
+      groups.push({ label: 'Completed', icon: 'task_alt', tasks: completed, color: 'text-green-500' });
+    }
+    return groups.length ? groups : [{ label: '', icon: '', tasks: [], color: '' }];
+  }
+
   // Only group in 'all' and 'today' views
   if (activeTab.value === 'completed' || searchQuery.value) {
     // No grouping for completed or search results
@@ -316,17 +358,17 @@ const firstName = computed(() => user.value?.name?.split(' ')[0] || 'there');
 // Tab options with icons and counts
 const tabOptions: { key: TaskStatus; label: string; shortLabel: string; icon: string }[] = [
   { key: 'today', label: 'Today', shortLabel: 'Today', icon: 'today' },
-  { key: 'upcoming', label: 'Upcoming', shortLabel: 'Soon', icon: 'event_upcoming' },
   { key: 'all', label: 'All', shortLabel: 'All', icon: 'list' },
-  { key: 'completed', label: 'Done', shortLabel: 'Done', icon: 'task_alt' }
+  { key: 'completed', label: 'Done', shortLabel: 'Done', icon: 'task_alt' },
+  { key: 'shared', label: 'Shared', shortLabel: 'Shared', icon: 'group' }
 ];
 
 const getTabCount = (tab: TaskStatus) => {
   switch (tab) {
     case 'today': return todayCount.value;
-    case 'upcoming': return upcomingCount.value;
     case 'all': return activeCount.value;
     case 'completed': return completedCount.value;
+    case 'shared': return sharedCount.value;
     default: return 0;
   }
 };
@@ -539,20 +581,29 @@ const handleSaveNewTask = (title: string, subtaskTitles: string[], category: Cat
   toast.success('Task created');
 };
 
-// Quick add handler
+// Quick add handler with NLI support
 const handleQuickAdd = () => {
   if (!quickAddTitle.value.trim()) return;
-  
+
+  const parsed = parsedQuickAdd.value;
   const defaultCategory = categories.value[0]?.id || '';
+
+  // Use parsed values if available
+  const title = parsed?.title || quickAddTitle.value.trim();
+  const category = parsed?.categoryId || defaultCategory;
+  const dueDate = parsed?.dueDate
+    ? parsed.dueDate.toISOString().split('T')[0]
+    : 'No Due Date';
+
   createTask({
-    title: quickAddTitle.value.trim(),
+    title,
     is_completed: false,
-    category: defaultCategory,
-    due_date: 'No Due Date',
-    due_date_color: 'text-slate-500',
+    category,
+    due_date: dueDate,
+    due_date_color: dueDate === 'No Due Date' ? 'text-slate-500' : 'text-blue-500',
     subtasks: []
   });
-  
+
   quickAddTitle.value = '';
   toast.success('Task created');
 };
@@ -699,7 +750,7 @@ const getCategoryTaskCount = (catId: string) => {
 
   <!-- Main App for authenticated users -->
   <template v-else>
-    <Header :user="user" :sync-status="syncStatus" @logout="logout" />
+    <Header :user="user" :sync-status="syncStatus" @logout="logout" @update-notify-setting="updateNotifySharedCompletion" />
 
     <main class="flex flex-1 justify-center py-6 px-4 md:px-8">
         <div class="flex flex-col max-w-[800px] w-full gap-6">
@@ -763,13 +814,29 @@ const getCategoryTaskCount = (catId: string) => {
               >
                 Add
               </button>
-              <kbd 
+              <kbd
                 v-else
                 class="inline-flex items-center px-2 py-1 text-xs font-medium text-slate-400 bg-slate-100 dark:bg-slate-800 rounded"
                 aria-hidden="true"
               >
                 Enter
               </kbd>
+            </div>
+
+            <!-- NLI Quick Add Preview -->
+            <div
+              v-if="showQuickAddPreview && parsedQuickAdd"
+              class="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400"
+            >
+              <span class="text-primary/70 font-medium">Detected:</span>
+              <span v-if="parsedQuickAdd.dueDate" class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded">
+                <span class="material-symbols-outlined text-[12px]">calendar_today</span>
+                {{ formatParsedDate(parsedQuickAdd.dueDate) }}
+              </span>
+              <span v-if="parsedQuickAdd.categoryName" class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded">
+                <span class="material-symbols-outlined text-[12px]">label</span>
+                {{ parsedQuickAdd.categoryName }}
+              </span>
             </div>
           </div>
 
@@ -796,13 +863,13 @@ const getCategoryTaskCount = (catId: string) => {
           <div class="flex flex-col sm:flex-row justify-between items-center border-b border-slate-200 dark:border-[#324467] gap-4">
 
             <!-- Tabs -->
-            <div class="flex w-full sm:w-auto justify-between sm:justify-start gap-1 sm:gap-2 px-1">
+            <div class="flex w-full sm:w-auto sm:flex-shrink-0 justify-start gap-1 sm:gap-2 px-1 overflow-x-auto scrollbar-hide">
               <button
                 v-for="tab in tabOptions"
                 :key="tab.key"
                 @click="activeTab = tab.key"
                 :class="[
-                  'group flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 rounded-lg transition-all cursor-pointer text-xs sm:text-sm font-medium whitespace-nowrap flex-1 sm:flex-none',
+                  'group flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 rounded-lg transition-all cursor-pointer text-xs sm:text-sm font-medium whitespace-nowrap flex-shrink-0',
                   activeTab === tab.key
                     ? 'bg-primary text-white shadow-md shadow-primary/20'
                     : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'
@@ -850,8 +917,8 @@ const getCategoryTaskCount = (catId: string) => {
             </div>
           </div>
 
-          <!-- Chips (Categories) -->
-          <div class="flex flex-col gap-2">
+          <!-- Chips (Categories) - Hidden on shared tab -->
+          <div v-if="activeTab !== 'shared'" class="flex flex-col gap-2">
             <div class="flex items-center justify-between">
               <span class="text-xs font-semibold uppercase text-slate-400 dark:text-slate-500 tracking-wider">
                 Filter by:
@@ -912,24 +979,24 @@ const getCategoryTaskCount = (catId: string) => {
           <div v-if="filteredTasks.length === 0 && !tasksLoading" class="flex flex-col items-center justify-center py-16 px-4">
             <div class="size-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
               <span class="material-symbols-outlined text-4xl text-slate-400 dark:text-slate-500" aria-hidden="true">
-                {{ hasActiveFilters ? 'filter_list_off' : (activeTab === 'completed' ? 'celebration' : (activeTab === 'today' ? 'wb_sunny' : 'inbox')) }}
+                {{ hasActiveFilters ? 'filter_list_off' : (activeTab === 'shared' ? 'group' : (activeTab === 'completed' ? 'celebration' : (activeTab === 'today' ? 'wb_sunny' : 'inbox'))) }}
               </span>
             </div>
             <h3 class="text-lg font-semibold text-slate-700 dark:text-slate-200 mb-1">
-              {{ hasActiveFilters ? 'No matching tasks' : 
-                 (activeTab === 'completed' ? 'No completed tasks yet' : 
-                 (activeTab === 'today' ? 'All clear for today! 🎉' : 
-                 (activeTab === 'upcoming' ? 'Nothing coming up' : 'No tasks yet'))) }}
+              {{ hasActiveFilters ? 'No matching tasks' :
+                 (activeTab === 'shared' ? 'No shared tasks' :
+                 (activeTab === 'completed' ? 'No completed tasks yet' :
+                 (activeTab === 'today' ? 'All clear for today!' : 'No tasks yet'))) }}
             </h3>
             <p class="text-sm text-slate-500 dark:text-slate-400 text-center max-w-xs mb-6">
-              {{ hasActiveFilters 
-                ? 'Try adjusting your filters or search query' 
-                : (activeTab === 'completed' 
-                    ? 'Complete some tasks and they\'ll appear here' 
-                    : (activeTab === 'today'
-                        ? 'Enjoy your free time or add a new task'
-                        : (activeTab === 'upcoming'
-                            ? 'Tasks due in the next 7 days will show here'
+              {{ hasActiveFilters
+                ? 'Try adjusting your filters or search query'
+                : (activeTab === 'shared'
+                    ? 'Tasks shared with you by others will appear here'
+                    : (activeTab === 'completed'
+                        ? 'Complete some tasks and they\'ll appear here'
+                        : (activeTab === 'today'
+                            ? 'Enjoy your free time or add a new task'
                             : 'Create your first task to get started')))
               }}
             </p>
@@ -942,7 +1009,7 @@ const getCategoryTaskCount = (catId: string) => {
                 Clear filters
               </button>
               <button
-                v-if="!hasActiveFilters && activeTab !== 'completed'"
+                v-if="!hasActiveFilters && activeTab !== 'completed' && activeTab !== 'shared'"
                 @click="isAddModalOpen = true"
                 class="px-6 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all flex items-center gap-2"
               >
@@ -1036,8 +1103,14 @@ const getCategoryTaskCount = (catId: string) => {
 
     <!-- Toast Notifications -->
     <ToastContainer />
-    
+
     <!-- Install Prompt (iOS + Android/Chrome) -->
     <InstallPrompt />
+
+    <!-- What's New Modal -->
+    <WhatsNewModal
+      :user-id="user?.id || null"
+      :last-seen-version="user?.lastSeenChangelog || null"
+    />
   </template>
 </template>

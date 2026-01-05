@@ -7,6 +7,7 @@ export interface ChangelogFeature {
   icon: string        // Material symbol icon name
   title: string
   description: string
+  isNew?: boolean     // Highlight as a new primary feature
 }
 
 export interface ChangelogEntry {
@@ -18,6 +19,37 @@ export interface ChangelogEntry {
 
 // Changelog entries - newest first
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '1.2.0',
+    date: '2026-01-05',
+    title: 'Organization Power-Up',
+    features: [
+      {
+        icon: 'drag_indicator',
+        title: 'Drag & Drop Reordering',
+        description: 'Organize your day exactly how you want. Just drag and drop tasks to change their order.',
+        isNew: true
+      },
+      {
+        icon: 'delete_sweep',
+        title: 'Task Bin & Recovery',
+        description: 'Deleted a task by mistake? No worries! It now goes to the Bin where you can restore or permanently delete it.',
+        isNew: true
+      },
+      {
+        icon: 'category',
+        title: 'Custom Category Sorting',
+        description: 'You can now reorder your categories in the Category Manager to keep your most used ones at the top.',
+        isNew: true
+      },
+      {
+        icon: 'auto_fix_high',
+        title: 'Slicker UI/UX',
+        description: 'Major performance improvements and a more polished, fluid interface for a premium experience.',
+        isNew: true
+      }
+    ]
+  },
   {
     version: '1.1.0',
     date: '2026-01-03',

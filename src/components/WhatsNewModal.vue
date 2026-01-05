@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, watch } from 'vue';
 import { supabase } from '../services/supabase';
 import { getNewEntries, getLatestVersion, type ChangelogEntry } from '../lib/changelog';
 
@@ -117,14 +117,35 @@ const handleDismiss = async () => {
                 <div
                   v-for="(feature, index) in currentEntry()?.features"
                   :key="index"
-                  class="flex gap-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                  class="flex gap-4 p-4 rounded-xl transition-all duration-300 group"
+                  :class="[
+                    feature.isNew 
+                      ? 'bg-primary/[0.03] dark:bg-primary/[0.05] border border-primary/10 dark:border-primary/20 shadow-sm' 
+                      : 'bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  ]"
                 >
-                  <div class="shrink-0 size-10 rounded-xl bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
-                    <span class="material-symbols-outlined text-primary text-[22px]">{{ feature.icon }}</span>
+                  <div class="shrink-0 size-12 rounded-xl flex items-center justify-center relative transition-transform duration-300 group-hover:scale-110"
+                    :class="[
+                      feature.isNew
+                        ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                        : 'bg-primary/10 dark:bg-primary/20 text-primary'
+                    ]"
+                  >
+                    <span class="material-symbols-outlined text-[24px]">{{ feature.icon }}</span>
+                    <div v-if="feature.isNew" class="absolute inset-0 overflow-hidden rounded-xl">
+                      <div class="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent animate-shimmer"></div>
+                    </div>
                   </div>
                   <div class="flex-1 min-w-0">
-                    <h3 class="font-semibold text-slate-900 dark:text-white text-sm">{{ feature.title }}</h3>
-                    <p class="text-slate-600 dark:text-slate-400 text-sm mt-0.5 leading-relaxed">{{ feature.description }}</p>
+                    <div class="flex items-center gap-2 mb-0.5">
+                      <h3 class="font-bold text-slate-900 dark:text-white text-[15px]">{{ feature.title }}</h3>
+                      <span v-if="feature.isNew" 
+                        class="px-2 py-0.5 rounded-full text-[10px] font-black bg-primary text-white uppercase tracking-widest shadow-sm animate-pulse"
+                      >
+                        New
+                      </span>
+                    </div>
+                    <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">{{ feature.description }}</p>
                   </div>
                 </div>
               </div>

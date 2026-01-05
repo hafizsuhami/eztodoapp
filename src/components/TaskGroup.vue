@@ -36,6 +36,14 @@ const touchCurrentY = ref<number>(0);
 const isTouchDragging = ref(false);
 const taskElements = ref<HTMLElement[]>([]);
 
+// Swipe-to-delete state
+const swipeStartX = ref<number>(0);
+const swipeCurrentX = ref<number>(0);
+const swipingTaskIndex = ref<number | null>(null);
+const isSwipingHorizontal = ref<boolean | null>(null);
+const SWIPE_THRESHOLD = 80; // pixels to trigger delete
+const DELETE_BUTTON_WIDTH = 80; // width of delete button
+
 // Sync with props
 watch(() => props.tasks, (newTasks) => {
   if (draggedIndex.value === null) {
@@ -60,10 +68,6 @@ const handleDragOver = (index: number, event: DragEvent) => {
   if (draggedIndex.value !== null && draggedIndex.value !== index) {
     dragOverIndex.value = index;
   }
-};
-
-const handleDragLeave = () => {
-  dragOverIndex.value = null;
 };
 
 const handleDrop = (dropIndex: number, event: DragEvent) => {
@@ -154,6 +158,84 @@ const getDragStyle = (index: number) => {
     position: 'relative' as const
   };
 };
+
+// Swipe-to-delete handlers
+const handleSwipeStart = (index: number, event: TouchEvent) => {
+  // Don't start swipe if on shared task (can't delete)
+  const task = localTasks.value[index];
+  if (task.is_shared_with_me) return;
+  
+  const touch = event.touches[0];
+  swipeStartX.value = touch.clientX;
+  swipeCurrentX.value = touch.clientX;
+  swipingTaskIndex.value = index;
+  isSwipingHorizontal.value = null; // Will be determined during move
+};
+
+const handleSwipeMove = (event: TouchEvent) => {
+  if (swipingTaskIndex.value === null) return;
+  
+  const touch = event.touches[0];
+  const deltaX = touch.clientX - swipeStartX.value;
+  const deltaY = Math.abs(touch.clientY - touchStartY.value);
+  
+  // Determine direction if not yet set (first significant move)
+  if (isSwipingHorizontal.value === null) {
+    const absDeltaX = Math.abs(deltaX);
+    if (absDeltaX > 10 || deltaY > 10) {
+      isSwipingHorizontal.value = absDeltaX > deltaY;
+    }
+  }
+  
+  // Only handle horizontal swipes (left swipe = negative delta)
+  if (isSwipingHorizontal.value && deltaX < 0) {
+    event.preventDefault(); // Prevent scroll when swiping
+    swipeCurrentX.value = touch.clientX;
+  }
+};
+
+const handleSwipeEnd = () => {
+  if (swipingTaskIndex.value === null) return;
+  
+  const deltaX = swipeCurrentX.value - swipeStartX.value;
+  
+  // If swiped past threshold, trigger delete
+  if (isSwipingHorizontal.value && deltaX < -SWIPE_THRESHOLD) {
+    const task = localTasks.value[swipingTaskIndex.value];
+    if (task && !task.is_shared_with_me) {
+      emit('delete', task.id);
+    }
+  }
+  
+  // Reset swipe state
+  resetSwipeState();
+};
+
+const resetSwipeState = () => {
+  swipeStartX.value = 0;
+  swipeCurrentX.value = 0;
+  swipingTaskIndex.value = null;
+  isSwipingHorizontal.value = null;
+};
+
+// Get swipe transform style
+const getSwipeStyle = (index: number) => {
+  if (swipingTaskIndex.value !== index || !isSwipingHorizontal.value) return {};
+  
+  const deltaX = swipeCurrentX.value - swipeStartX.value;
+  // Only allow left swipe (negative), clamp at delete button width
+  const clampedDelta = Math.max(Math.min(deltaX, 0), -DELETE_BUTTON_WIDTH);
+  
+  return {
+    transform: `translateX(${clampedDelta}px)`,
+    transition: 'none'
+  };
+};
+
+// Check if delete action should show
+const isSwipingTask = (index: number) => {
+  return swipingTaskIndex.value === index && isSwipingHorizontal.value;
+};
 </script>
 
 <template>
@@ -170,53 +252,76 @@ const getDragStyle = (index: number) => {
     <div
       v-for="(task, index) in localTasks"
       :key="task.id"
-      class="task-item flex items-center transition-all duration-200"
+      class="task-item relative overflow-hidden rounded-xl"
       :class="{
         'opacity-50 scale-[0.98]': draggedIndex === index && !isTouchDragging,
         'shadow-lg': draggedIndex === index && isTouchDragging,
       }"
       :style="getDragStyle(index)"
     >
-      <!-- Drag handle - separate from card -->
+      <!-- Delete action background (revealed when swiping) -->
       <div 
-        draggable="true"
-        @dragstart="handleDragStart(index, $event)"
-        @dragover.prevent="handleDragOver(index, $event)"
-        @drop="handleDrop(index, $event)"
-        @dragend="handleDragEnd"
-        @touchstart.stop.passive="handleTouchStart(index, $event)"
-        @touchmove="handleTouchMove"
-        @touchend="handleTouchEnd"
-        class="shrink-0 w-6 h-full flex items-center justify-center cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors touch-none mr-1"
-        title="Drag to reorder"
+        v-if="!task.is_shared_with_me"
+        class="absolute inset-y-0 right-0 flex items-center justify-end bg-gradient-to-l from-red-500 to-red-600 transition-opacity"
+        :class="isSwipingTask(index) ? 'opacity-100' : 'opacity-0'"
+        :style="{ width: DELETE_BUTTON_WIDTH + 'px' }"
       >
-        <span class="material-symbols-outlined text-[18px]">drag_indicator</span>
+        <div class="flex flex-col items-center justify-center w-full h-full text-white">
+          <span class="material-symbols-outlined text-[24px]">delete</span>
+          <span class="text-xs font-medium mt-0.5">Delete</span>
+        </div>
       </div>
       
-      <!-- Drop indicator line -->
+      <!-- Swipeable content container -->
       <div 
-        v-if="dragOverIndex === index && draggedIndex !== index"
-        class="absolute -top-1.5 left-0 right-0 h-0.5 bg-primary rounded-full z-10"
-      />
-      
-      <!-- Task card takes remaining space -->
-      <div 
-        class="flex-1 min-w-0"
-        @dragover.prevent="handleDragOver(index, $event)"
-        @drop="handleDrop(index, $event)"
+        class="flex items-center bg-white dark:bg-[#1e293b] transition-transform"
+        :style="getSwipeStyle(index)"
+        @touchstart.passive="handleSwipeStart(index, $event)"
+        @touchmove="handleSwipeMove"
+        @touchend="handleSwipeEnd"
+        @touchcancel="resetSwipeState"
       >
-        <TaskCard
-          :task="task"
-          :categories="categories"
-          @toggle="emit('toggle', task.id)"
-          @toggle-subtask="emit('toggleSubtask', task.id, $event)"
-          @delete="emit('delete', task.id)"
-          @delete-subtask="(taskId, subtaskId) => emit('deleteSubtask', taskId, subtaskId)"
-          @edit="emit('edit', task.id)"
-          @share="emit('share', task.id)"
-          @update-subtask-title="(taskId, subtaskId, title) => emit('updateSubtaskTitle', taskId, subtaskId, title)"
-          @update-category="(taskId, catId) => emit('updateCategory', taskId, catId)"
+        <!-- Drag handle - separate from card -->
+        <div 
+          draggable="true"
+          @dragstart="handleDragStart(index, $event)"
+          @dragover.prevent="handleDragOver(index, $event)"
+          @drop="handleDrop(index, $event)"
+          @dragend="handleDragEnd"
+          @touchstart.stop.passive="handleTouchStart(index, $event)"
+          @touchmove="handleTouchMove"
+          @touchend="handleTouchEnd"
+          class="shrink-0 w-6 h-full flex items-center justify-center cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors touch-none mr-1"
+          title="Drag to reorder"
+        >
+          <span class="material-symbols-outlined text-[18px]">drag_indicator</span>
+        </div>
+        
+        <!-- Drop indicator line -->
+        <div 
+          v-if="dragOverIndex === index && draggedIndex !== index"
+          class="absolute -top-1.5 left-0 right-0 h-0.5 bg-primary rounded-full z-10"
         />
+        
+        <!-- Task card takes remaining space -->
+        <div 
+          class="flex-1 min-w-0"
+          @dragover.prevent="handleDragOver(index, $event)"
+          @drop="handleDrop(index, $event)"
+        >
+          <TaskCard
+            :task="task"
+            :categories="categories"
+            @toggle="emit('toggle', task.id)"
+            @toggle-subtask="emit('toggleSubtask', task.id, $event)"
+            @delete="emit('delete', task.id)"
+            @delete-subtask="(taskId, subtaskId) => emit('deleteSubtask', taskId, subtaskId)"
+            @edit="emit('edit', task.id)"
+            @share="emit('share', task.id)"
+            @update-subtask-title="(taskId, subtaskId, title) => emit('updateSubtaskTitle', taskId, subtaskId, title)"
+            @update-category="(taskId, catId) => emit('updateCategory', taskId, catId)"
+          />
+        </div>
       </div>
     </div>
   </div>

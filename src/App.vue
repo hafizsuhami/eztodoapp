@@ -132,11 +132,15 @@ const getUserId = () => user.value?.id;
 const getUserName = () => user.value?.name;
 const {
   tasks,
+  deletedTasks,
   loading: tasksLoading,
   syncStatus,
   createTask,
   updateTask,
   deleteTask,
+  restoreTask,
+  permanentlyDeleteTask,
+  emptyTrash,
   toggleTask,
   updateTaskCategory,
   updateSubtasks,
@@ -166,9 +170,9 @@ const searchInputRef = ref<HTMLInputElement | null>(null);
 const quickAddTitle = ref('');
 const isQuickAddFocused = ref(false);
 
-// Clear category filter when switching to shared tab (categories don't apply)
+// Clear category filter when switching to shared or bin tab (categories don't apply)
 watch(activeTab, (newTab) => {
-  if (newTab === 'shared') {
+  if (newTab === 'shared' || newTab === 'bin') {
     categoryFilter.value = null;
   }
 });
@@ -235,6 +239,7 @@ const activeCount = computed(() => tasks.value.filter(t => !t.is_completed).leng
 const completedCount = computed(() => tasks.value.filter(t => t.is_completed).length);
 const todayCount = computed(() => tasks.value.filter(t => !t.is_completed && (isToday(t.due_date) || isOverdue(t.due_date))).length);
 const sharedCount = computed(() => tasks.value.filter(t => t.is_shared_with_me).length);
+const binCount = computed(() => deletedTasks.value.length);
 
 const filteredTasks = computed(() => {
   return tasks.value.filter(task => {
@@ -366,7 +371,8 @@ const tabOptions: { key: TaskStatus; label: string; shortLabel: string; icon: st
   { key: 'today', label: 'Today', shortLabel: 'Today', icon: 'today' },
   { key: 'all', label: 'All', shortLabel: 'All', icon: 'list' },
   { key: 'completed', label: 'Done', shortLabel: 'Done', icon: 'task_alt' },
-  { key: 'shared', label: 'Shared', shortLabel: 'Shared', icon: 'group' }
+  { key: 'shared', label: 'Shared', shortLabel: 'Shared', icon: 'group' },
+  { key: 'bin', label: 'Bin', shortLabel: 'Bin', icon: 'delete' }
 ];
 
 const getTabCount = (tab: TaskStatus) => {
@@ -375,6 +381,7 @@ const getTabCount = (tab: TaskStatus) => {
     case 'all': return activeCount.value;
     case 'completed': return completedCount.value;
     case 'shared': return sharedCount.value;
+    case 'bin': return binCount.value;
     default: return 0;
   }
 };
@@ -492,7 +499,7 @@ const handleDeleteTask = (id: string) => {
   if (task) {
     recentlyDeletedTask.value = { ...task };
     deleteTask(id);
-    toast.success('Task deleted', {
+    toast.success('Moved to Bin', {
       duration: 5000,
       action: {
         label: 'Undo',
@@ -504,20 +511,45 @@ const handleDeleteTask = (id: string) => {
 
 const handleUndoDelete = () => {
   if (recentlyDeletedTask.value) {
-    const task = recentlyDeletedTask.value;
-    createTask({
-      title: task.title,
-      is_completed: task.is_completed,
-      category: task.category,
-      due_date: task.due_date,
-      due_date_color: task.due_date_color,
-      due_date_bg: task.due_date_bg,
-      due_date_icon: task.due_date_icon,
-      subtasks: task.subtasks
-    });
+    // Use restore instead of recreating
+    restoreTask(recentlyDeletedTask.value.id);
     recentlyDeletedTask.value = null;
     toast.success('Task restored');
   }
+};
+
+// Bin-specific handlers
+const handleRestoreTask = (id: string) => {
+  restoreTask(id);
+  toast.success('Task restored');
+};
+
+const showPermanentDeleteConfirm = ref(false);
+const taskToPermanentlyDelete = ref<{ id: string; title: string } | null>(null);
+
+const handlePermanentDeleteClick = (taskId: string) => {
+  const task = deletedTasks.value.find(t => t.id === taskId);
+  if (task) {
+    taskToPermanentlyDelete.value = { id: task.id, title: task.title };
+    showPermanentDeleteConfirm.value = true;
+  }
+};
+
+const handleConfirmPermanentDelete = () => {
+  if (taskToPermanentlyDelete.value) {
+    permanentlyDeleteTask(taskToPermanentlyDelete.value.id);
+    toast.success('Permanently deleted');
+  }
+  showPermanentDeleteConfirm.value = false;
+  taskToPermanentlyDelete.value = null;
+};
+
+const showEmptyTrashConfirm = ref(false);
+
+const handleEmptyTrash = () => {
+  emptyTrash();
+  showEmptyTrashConfirm.value = false;
+  toast.success('Trash emptied');
 };
 
 const handleEditTask = (id: string) => {
@@ -923,8 +955,8 @@ const getCategoryTaskCount = (catId: string) => {
             </div>
           </div>
 
-          <!-- Chips (Categories) - Hidden on shared tab -->
-          <div v-if="activeTab !== 'shared'" class="flex flex-col gap-2">
+          <!-- Chips (Categories) - Hidden on shared and bin tabs -->
+          <div v-if="activeTab !== 'shared' && activeTab !== 'bin'" class="flex flex-col gap-2">
             <div class="flex items-center justify-between">
               <span class="text-xs font-semibold uppercase text-slate-400 dark:text-slate-500 tracking-wider">
                 Filter by:
@@ -981,68 +1013,145 @@ const getCategoryTaskCount = (catId: string) => {
 
         <!-- Task List Container -->
         <div class="flex flex-col gap-3 pb-20" role="list" aria-label="Task list">
-          <!-- Empty State -->
-          <div v-if="filteredTasks.length === 0 && !tasksLoading" class="flex flex-col items-center justify-center py-16 px-4">
-            <div class="size-48 flex items-center justify-center mb-4">
-              <img src="./assets/empty-state.png" alt="No tasks" class="w-full h-full object-contain opacity-90 hover:scale-105 transition-transform duration-500" />
+          <!-- BIN VIEW -->
+          <template v-if="activeTab === 'bin'">
+            <!-- Empty Bin State -->
+            <div v-if="deletedTasks.length === 0" class="flex flex-col items-center justify-center py-16 px-4">
+              <div class="size-24 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
+                <span class="material-symbols-outlined text-5xl text-slate-300 dark:text-slate-600">delete_sweep</span>
+              </div>
+              <h3 class="text-xl font-bold text-slate-700 dark:text-slate-200 mb-1">
+                Bin is empty
+              </h3>
+              <p class="text-sm text-slate-500 dark:text-slate-400 text-center max-w-xs">
+                Deleted tasks will appear here for 30 days before being permanently removed
+              </p>
             </div>
-            <h3 class="text-xl font-bold text-slate-700 dark:text-slate-200 mb-1">
-              {{ hasActiveFilters ? 'No matching tasks' :
-                 (activeTab === 'shared' ? 'No shared tasks' :
-                 (activeTab === 'completed' ? 'No completed tasks yet' :
-                 (activeTab === 'today' ? 'All clear for today!' : 'No tasks yet'))) }}
-            </h3>
-            <p class="text-sm text-slate-500 dark:text-slate-400 text-center max-w-xs mb-6">
-              {{ hasActiveFilters
-                ? 'Try adjusting your filters or search query'
-                : (activeTab === 'shared'
-                    ? 'Tasks shared with you by others will appear here'
-                    : (activeTab === 'completed'
-                        ? 'Complete some tasks and they\'ll appear here'
-                        : (activeTab === 'today'
-                            ? 'Enjoy your free time or add a new task'
-                            : 'Create your first task to get started')))
-              }}
-            </p>
-            <div class="flex gap-3">
-              <button
-                v-if="hasActiveFilters"
-                @click="clearFilters"
-                class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-              >
-                Clear filters
-              </button>
-              <button
-                v-if="!hasActiveFilters && activeTab !== 'completed' && activeTab !== 'shared'"
-                @click="isAddModalOpen = true"
-                class="px-6 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all flex items-center gap-2"
-              >
-                <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
-                {{ activeTab === 'today' ? 'Add task for today' : 'Add new task' }}
-              </button>
-            </div>
-          </div>
 
-          <!-- Grouped Task List -->
+            <!-- Bin Header with Empty Trash -->
+            <div v-else class="flex flex-col gap-4">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-[18px] text-slate-400">delete</span>
+                  <span class="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                    {{ deletedTasks.length }} item{{ deletedTasks.length !== 1 ? 's' : '' }} in bin
+                  </span>
+                </div>
+                <button
+                  @click="showEmptyTrashConfirm = true"
+                  class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                >
+                  <span class="material-symbols-outlined text-[18px]">delete_forever</span>
+                  Empty Bin
+                </button>
+              </div>
+
+              <!-- Deleted Tasks List -->
+              <div class="flex flex-col gap-3">
+                <div
+                  v-for="task in deletedTasks"
+                  :key="task.id"
+                  class="flex items-center gap-3 p-4 bg-white dark:bg-[#1e293b] rounded-xl border border-slate-200 dark:border-slate-800 opacity-75 hover:opacity-100 transition-opacity"
+                >
+                  <!-- Task Info -->
+                  <div class="flex-1 min-w-0">
+                    <p class="font-medium text-slate-700 dark:text-slate-200 truncate">
+                      {{ task.title }}
+                    </p>
+                    <p class="text-xs text-slate-400 mt-0.5">
+                      Deleted {{ task.deleted_at ? new Date(task.deleted_at).toLocaleDateString() : 'recently' }}
+                    </p>
+                  </div>
+
+                  <!-- Actions -->
+                  <div class="flex items-center gap-1 shrink-0">
+                    <button
+                      @click="handleRestoreTask(task.id)"
+                      class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                      title="Restore task"
+                    >
+                      <span class="material-symbols-outlined text-[18px]">restore</span>
+                      <span class="hidden sm:inline">Restore</span>
+                    </button>
+                    <button
+                      @click="handlePermanentDeleteClick(task.id)"
+                      class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                      title="Delete permanently"
+                    >
+                      <span class="material-symbols-outlined text-[18px]">delete_forever</span>
+                      <span class="hidden sm:inline">Delete</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- REGULAR VIEWS (not bin) -->
           <template v-else>
-            <TaskGroup
-              v-for="group in groupedTasks"
-              :key="group.label || 'ungrouped'"
-              :tasks="group.tasks"
-              :categories="categories"
-              :group-label="group.label"
-              :group-icon="group.icon"
-              :group-color="group.color"
-              @toggle="handleToggleTask"
-              @toggle-subtask="handleToggleSubtask"
-              @delete="handleDeleteTask"
-              @delete-subtask="handleDeleteSubtask"
-              @edit="handleEditTask"
-              @share="handleShareTask"
-              @update-subtask-title="handleUpdateSubtaskTitle"
-              @update-category="handleUpdateTaskCategory"
-              @reorder-tasks="reorderTasks"
-            />
+            <!-- Empty State -->
+            <div v-if="filteredTasks.length === 0 && !tasksLoading" class="flex flex-col items-center justify-center py-16 px-4">
+              <div class="size-48 flex items-center justify-center mb-4">
+                <img src="./assets/empty-state.png" alt="No tasks" class="w-full h-full object-contain opacity-90 hover:scale-105 transition-transform duration-500" />
+              </div>
+              <h3 class="text-xl font-bold text-slate-700 dark:text-slate-200 mb-1">
+                {{ hasActiveFilters ? 'No matching tasks' :
+                   (activeTab === 'shared' ? 'No shared tasks' :
+                   (activeTab === 'completed' ? 'No completed tasks yet' :
+                   (activeTab === 'today' ? 'All clear for today!' : 'No tasks yet'))) }}
+              </h3>
+              <p class="text-sm text-slate-500 dark:text-slate-400 text-center max-w-xs mb-6">
+                {{ hasActiveFilters
+                  ? 'Try adjusting your filters or search query'
+                  : (activeTab === 'shared'
+                      ? 'Tasks shared with you by others will appear here'
+                      : (activeTab === 'completed'
+                          ? 'Complete some tasks and they\'ll appear here'
+                          : (activeTab === 'today'
+                              ? 'Enjoy your free time or add a new task'
+                              : 'Create your first task to get started')))
+                }}
+              </p>
+              <div class="flex gap-3">
+                <button
+                  v-if="hasActiveFilters"
+                  @click="clearFilters"
+                  class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Clear filters
+                </button>
+                <button
+                  v-if="!hasActiveFilters && activeTab !== 'completed' && activeTab !== 'shared'"
+                  @click="isAddModalOpen = true"
+                  class="px-6 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all flex items-center gap-2"
+                >
+                  <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
+                  {{ activeTab === 'today' ? 'Add task for today' : 'Add new task' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Grouped Task List -->
+            <template v-else>
+              <TaskGroup
+                v-for="group in groupedTasks"
+                :key="group.label || 'ungrouped'"
+                :tasks="group.tasks"
+                :categories="categories"
+                :group-label="group.label"
+                :group-icon="group.icon"
+                :group-color="group.color"
+                @toggle="handleToggleTask"
+                @toggle-subtask="handleToggleSubtask"
+                @delete="handleDeleteTask"
+                @delete-subtask="handleDeleteSubtask"
+                @edit="handleEditTask"
+                @share="handleShareTask"
+                @update-subtask-title="handleUpdateSubtaskTitle"
+                @update-category="handleUpdateTaskCategory"
+                @reorder-tasks="reorderTasks"
+              />
+            </template>
           </template>
         </div>
 
@@ -1097,6 +1206,32 @@ const getCategoryTaskCount = (catId: string) => {
       icon="delete"
       @confirm="handleConfirmSubtaskDelete"
       @cancel="showSubtaskDeleteConfirm = false"
+    />
+
+    <!-- Empty Trash Confirmation Modal -->
+    <ConfirmModal
+      :is-open="showEmptyTrashConfirm"
+      title="Empty Bin"
+      :message="`Are you sure you want to permanently delete all ${deletedTasks.length} item${deletedTasks.length !== 1 ? 's' : ''} in the bin? This action cannot be undone.`"
+      confirm-text="Empty Bin"
+      cancel-text="Cancel"
+      variant="danger"
+      icon="delete_forever"
+      @confirm="handleEmptyTrash"
+      @cancel="showEmptyTrashConfirm = false"
+    />
+
+    <!-- Permanent Delete Individual Task Confirmation Modal -->
+    <ConfirmModal
+      :is-open="showPermanentDeleteConfirm"
+      title="Delete Permanently"
+      :message="`Are you sure you want to permanently delete '${taskToPermanentlyDelete?.title}'? This action cannot be undone.`"
+      confirm-text="Delete Forever"
+      cancel-text="Cancel"
+      variant="danger"
+      icon="delete_forever"
+      @confirm="handleConfirmPermanentDelete"
+      @cancel="showPermanentDeleteConfirm = false; taskToPermanentlyDelete = null"
     />
 
     <!-- Toast Notifications -->

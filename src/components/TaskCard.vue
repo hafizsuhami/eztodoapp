@@ -398,9 +398,9 @@ const handleCategoryKeydown = (event: KeyboardEvent, catId: CategoryId) => {
   <!-- Delete Confirmation Modal -->
   <ConfirmModal
     :is-open="showDeleteConfirm"
-    title="Delete Task"
-    :message="`Are you sure you want to delete '${task.title}'? This action cannot be undone.`"
-    confirm-text="Delete"
+    title="Move to Bin"
+    :message="`Are you sure you want to move '${task.title}' to the bin? You can restore it later if you change your mind.`"
+    confirm-text="Move to Bin"
     cancel-text="Cancel"
     variant="danger"
     icon="delete"

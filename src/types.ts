@@ -6,7 +6,7 @@ export interface CategoryOption {
 }
 
 export type CategoryId = string;
-export type TaskStatus = 'today' | 'all' | 'completed' | 'shared';
+export type TaskStatus = 'today' | 'all' | 'completed' | 'shared' | 'bin';
 export type ThemeName = keyof typeof import('./constants').THEME_PRESETS;
 
 export interface Subtask {
@@ -31,6 +31,7 @@ export interface Task {
   order_index?: number; // For manual ordering within groups
   created_at?: string;
   updated_at?: string;
+  deleted_at?: string; // Soft delete timestamp (null = active, set = in trash)
   // Sharing metadata (populated when fetching)
   is_shared_with_me?: boolean;
   shared_by?: {

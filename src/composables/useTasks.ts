@@ -15,6 +15,7 @@ export type SyncStatus = 'synced' | 'syncing' | 'offline' | 'error';
 
 export function useTasks(userId: () => string | undefined, userName?: () => string | undefined) {
   const tasks = ref<Task[]>([]);
+  const deletedTasks = ref<Task[]>([]); // Tasks in trash bin
   const loading = ref(true);
   const error = ref<string | null>(null);
   const syncStatus = ref<SyncStatus>('synced');
@@ -69,12 +70,19 @@ export function useTasks(userId: () => string | undefined, userName?: () => stri
         });
 
       // Combine owned tasks (not shared) with shared tasks
-      const allTasks = [
-        ...(ownedTasks || []).map(t => ({ ...t, is_shared_with_me: false })),
-        ...sharedTasks
+      // Filter out deleted tasks from active list
+      const activeTasks = [
+        ...(ownedTasks || []).filter(t => !t.deleted_at).map(t => ({ ...t, is_shared_with_me: false })),
+        ...sharedTasks.filter(t => !t.deleted_at)
       ];
 
-      tasks.value = allTasks;
+      // Separate deleted tasks for bin (owned only - can't see others' deleted tasks)
+      const trashedTasks = (ownedTasks || [])
+        .filter(t => t.deleted_at)
+        .map(t => ({ ...t, is_shared_with_me: false }));
+
+      tasks.value = activeTasks;
+      deletedTasks.value = trashedTasks;
       // Track shared task IDs for real-time broadcast filtering
       sharedTaskIds.value = new Set(sharedTasks.map(t => t.id));
       setCachedTasks(tasks.value);
@@ -292,18 +300,90 @@ export function useTasks(userId: () => string | undefined, userName?: () => stri
     }
   };
 
+  // Soft delete - move to trash
   const deleteTask = async (taskId: string) => {
-    // Optimistic update
+    const taskToDelete = tasks.value.find(t => t.id === taskId);
+    if (!taskToDelete) return;
+
+    const deletedAt = new Date().toISOString();
+
+    // Optimistic update - move to trash
     tasks.value = tasks.value.filter(t => t.id !== taskId);
+    deletedTasks.value = [{ ...taskToDelete, deleted_at: deletedAt }, ...deletedTasks.value];
     setCachedTasks(tasks.value);
 
     if (isOnline() && !taskId.startsWith('temp_')) {
       try {
         syncStatus.value = 'syncing';
 
-        // Broadcast deletion to shared task recipients BEFORE deleting
-        // (cascade will remove shares, so we need to check first)
+        // Broadcast deletion to shared task recipients
         await broadcastTaskUpdate(taskId, null, 'DELETE');
+
+        const { error: updateError } = await supabase
+          .from('tasks')
+          .update({ deleted_at: deletedAt })
+          .eq('id', taskId);
+
+        if (updateError) throw updateError;
+        syncStatus.value = 'synced';
+      } catch (e) {
+        console.error('Failed to soft delete task:', e);
+        // Revert optimistic update on error
+        deletedTasks.value = deletedTasks.value.filter(t => t.id !== taskId);
+        tasks.value = [taskToDelete, ...tasks.value];
+        setCachedTasks(tasks.value);
+        syncStatus.value = 'error';
+      }
+    } else if (!isOnline()) {
+      addToQueue({ type: 'update', recordId: taskId, data: { deleted_at: deletedAt } });
+      syncStatus.value = 'offline';
+    }
+  };
+
+  // Restore task from trash
+  const restoreTask = async (taskId: string) => {
+    const taskToRestore = deletedTasks.value.find(t => t.id === taskId);
+    if (!taskToRestore) return;
+
+    // Optimistic update - move back to active
+    deletedTasks.value = deletedTasks.value.filter(t => t.id !== taskId);
+    const restoredTask = { ...taskToRestore, deleted_at: undefined };
+    tasks.value = [restoredTask, ...tasks.value];
+    setCachedTasks(tasks.value);
+
+    if (isOnline() && !taskId.startsWith('temp_')) {
+      try {
+        syncStatus.value = 'syncing';
+
+        const { error: updateError } = await supabase
+          .from('tasks')
+          .update({ deleted_at: null })
+          .eq('id', taskId);
+
+        if (updateError) throw updateError;
+        syncStatus.value = 'synced';
+      } catch (e) {
+        console.error('Failed to restore task:', e);
+        // Revert optimistic update
+        tasks.value = tasks.value.filter(t => t.id !== taskId);
+        deletedTasks.value = [taskToRestore, ...deletedTasks.value];
+        setCachedTasks(tasks.value);
+        syncStatus.value = 'error';
+      }
+    } else if (!isOnline()) {
+      addToQueue({ type: 'update', recordId: taskId, data: { deleted_at: undefined } });
+      syncStatus.value = 'offline';
+    }
+  };
+
+  // Permanently delete task (from trash)
+  const permanentlyDeleteTask = async (taskId: string) => {
+    // Optimistic update
+    deletedTasks.value = deletedTasks.value.filter(t => t.id !== taskId);
+
+    if (isOnline() && !taskId.startsWith('temp_')) {
+      try {
+        syncStatus.value = 'syncing';
 
         const { error: deleteError } = await supabase
           .from('tasks')
@@ -313,12 +393,46 @@ export function useTasks(userId: () => string | undefined, userName?: () => stri
         if (deleteError) throw deleteError;
         syncStatus.value = 'synced';
       } catch (e) {
-        console.error('Failed to delete task:', e);
+        console.error('Failed to permanently delete task:', e);
         addToQueue({ type: 'delete', recordId: taskId });
         syncStatus.value = 'offline';
       }
     } else if (!isOnline()) {
       addToQueue({ type: 'delete', recordId: taskId });
+      syncStatus.value = 'offline';
+    }
+  };
+
+  // Empty entire trash
+  const emptyTrash = async () => {
+    const trashedIds = deletedTasks.value.map(t => t.id);
+    if (trashedIds.length === 0) return;
+
+    // Optimistic update
+    deletedTasks.value = [];
+
+    if (isOnline()) {
+      try {
+        syncStatus.value = 'syncing';
+
+        const { error: deleteError } = await supabase
+          .from('tasks')
+          .delete()
+          .in('id', trashedIds.filter(id => !id.startsWith('temp_')));
+
+        if (deleteError) throw deleteError;
+        syncStatus.value = 'synced';
+      } catch (e) {
+        console.error('Failed to empty trash:', e);
+        // Refetch to restore state
+        await fetchTasks();
+        syncStatus.value = 'error';
+      }
+    } else {
+      // Queue all deletes
+      trashedIds.forEach(id => {
+        addToQueue({ type: 'delete', recordId: id });
+      });
       syncStatus.value = 'offline';
     }
   };
@@ -546,12 +660,16 @@ export function useTasks(userId: () => string | undefined, userName?: () => stri
 
   return {
     tasks,
+    deletedTasks,
     loading,
     error,
     syncStatus,
     createTask,
     updateTask,
     deleteTask,
+    restoreTask,
+    permanentlyDeleteTask,
+    emptyTrash,
     toggleTask,
     updateTaskCategory,
     updateSubtasks,

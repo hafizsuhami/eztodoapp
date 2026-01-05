@@ -65,8 +65,8 @@ export function useCategories(userId: () => string | undefined) {
   };
 
   const seedDefaultCategories = async (uid: string) => {
+    // Don't include custom string IDs - let Supabase auto-generate UUIDs
     const toInsert = DEFAULT_CATEGORIES.map(c => ({
-      id: c.id,
       user_id: uid,
       name: c.name,
       color: c.color

@@ -977,12 +977,10 @@ const getCategoryTaskCount = (catId: string) => {
         <div class="flex flex-col gap-3 pb-20" role="list" aria-label="Task list">
           <!-- Empty State -->
           <div v-if="filteredTasks.length === 0 && !tasksLoading" class="flex flex-col items-center justify-center py-16 px-4">
-            <div class="size-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
-              <span class="material-symbols-outlined text-4xl text-slate-400 dark:text-slate-500" aria-hidden="true">
-                {{ hasActiveFilters ? 'filter_list_off' : (activeTab === 'shared' ? 'group' : (activeTab === 'completed' ? 'celebration' : (activeTab === 'today' ? 'wb_sunny' : 'inbox'))) }}
-              </span>
+            <div class="size-48 flex items-center justify-center mb-4">
+              <img src="./assets/empty-state.png" alt="No tasks" class="w-full h-full object-contain opacity-90 hover:scale-105 transition-transform duration-500" />
             </div>
-            <h3 class="text-lg font-semibold text-slate-700 dark:text-slate-200 mb-1">
+            <h3 class="text-xl font-bold text-slate-700 dark:text-slate-200 mb-1">
               {{ hasActiveFilters ? 'No matching tasks' :
                  (activeTab === 'shared' ? 'No shared tasks' :
                  (activeTab === 'completed' ? 'No completed tasks yet' :

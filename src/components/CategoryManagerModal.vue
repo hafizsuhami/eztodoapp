@@ -136,34 +136,38 @@ const deleteConfirmMessage = computed(() => {
               class="flex items-center gap-3 p-3 bg-slate-50 dark:bg-[#161f30] rounded-xl border border-slate-200 dark:border-slate-700"
             >
               <template v-if="editingId === cat.id">
-                <input
-                  v-model="editName"
-                  type="text"
-                  class="flex-1 bg-white dark:bg-[#1e293b] border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  @keyup.enter="saveEdit"
-                />
-                <div class="flex gap-1">
-                  <button
-                    v-for="col in PASTEL_COLORS"
-                    :key="col"
-                    @click="editColor = col"
-                    class="w-5 h-5 rounded-full border-2 transition-all"
-                    :style="{ backgroundColor: col }"
-                    :class="editColor === col ? 'border-primary scale-110' : 'border-transparent'"
-                  ></button>
+                <div class="flex flex-col gap-2 w-full">
+                  <div class="flex items-center gap-2">
+                    <input
+                      v-model="editName"
+                      type="text"
+                      class="flex-1 bg-white dark:bg-[#1e293b] border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      @keyup.enter="saveEdit"
+                    />
+                    <button
+                      @click="saveEdit"
+                      class="text-primary hover:text-primary/80 shrink-0"
+                    >
+                      <span class="material-symbols-outlined text-[20px]">check</span>
+                    </button>
+                    <button
+                      @click="cancelEdit"
+                      class="text-slate-400 hover:text-slate-600 shrink-0"
+                    >
+                      <span class="material-symbols-outlined text-[20px]">close</span>
+                    </button>
+                  </div>
+                  <div class="flex flex-wrap gap-1.5">
+                    <button
+                      v-for="col in PASTEL_COLORS"
+                      :key="col"
+                      @click="editColor = col"
+                      class="w-5 h-5 rounded-full border-2 transition-all"
+                      :style="{ backgroundColor: col }"
+                      :class="editColor === col ? 'border-primary scale-110' : 'border-transparent'"
+                    ></button>
+                  </div>
                 </div>
-                <button
-                  @click="saveEdit"
-                  class="text-primary hover:text-primary/80"
-                >
-                  <span class="material-symbols-outlined text-[20px]">check</span>
-                </button>
-                <button
-                  @click="cancelEdit"
-                  class="text-slate-400 hover:text-slate-600"
-                >
-                  <span class="material-symbols-outlined text-[20px]">close</span>
-                </button>
               </template>
               <template v-else>
                 <span

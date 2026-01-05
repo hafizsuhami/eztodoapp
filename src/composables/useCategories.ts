@@ -35,7 +35,7 @@ export function useCategories(userId: () => string | undefined) {
         .from('categories')
         .select('*')
         .eq('user_id', id)
-        .order('created_at', { ascending: true });
+        .order('order_index', { ascending: true });
 
       if (error) throw error;
 
@@ -43,7 +43,8 @@ export function useCategories(userId: () => string | undefined) {
         categories.value = data.map((c: any) => ({
           id: c.id,
           name: c.name,
-          color: c.color
+          color: c.color,
+          order_index: c.order_index ?? 0
         }));
       } else {
         // Seed default categories for new user
@@ -66,10 +67,11 @@ export function useCategories(userId: () => string | undefined) {
 
   const seedDefaultCategories = async (uid: string) => {
     // Don't include custom string IDs - let Supabase auto-generate UUIDs
-    const toInsert = DEFAULT_CATEGORIES.map(c => ({
+    const toInsert = DEFAULT_CATEGORIES.map((c, index) => ({
       user_id: uid,
       name: c.name,
-      color: c.color
+      color: c.color,
+      order_index: index
     }));
 
     const { data, error } = await supabase
@@ -84,7 +86,8 @@ export function useCategories(userId: () => string | undefined) {
       categories.value = data.map((c: any) => ({
         id: c.id,
         name: c.name,
-        color: c.color
+        color: c.color,
+        order_index: c.order_index ?? 0
       }));
     }
   };
@@ -93,8 +96,12 @@ export function useCategories(userId: () => string | undefined) {
     const id = userId();
     if (!id) return;
 
+    // New category gets the highest order_index + 1
+    const maxOrder = categories.value.reduce((max, c) => Math.max(max, c.order_index ?? 0), -1);
+    const newOrder = maxOrder + 1;
+
     const tempId = 'cat-' + Date.now().toString();
-    const newCat: CategoryOption = { id: tempId, name, color };
+    const newCat: CategoryOption = { id: tempId, name, color, order_index: newOrder };
 
     categories.value = [...categories.value, newCat];
     setCachedCategories(categories.value);
@@ -102,14 +109,14 @@ export function useCategories(userId: () => string | undefined) {
     try {
       const { data, error } = await supabase
         .from('categories')
-        .insert({ user_id: id, name, color })
+        .insert({ user_id: id, name, color, order_index: newOrder })
         .select()
         .single();
 
       if (error) throw error;
 
       categories.value = categories.value.map(c =>
-        c.id === tempId ? { id: data.id, name: data.name, color: data.color } : c
+        c.id === tempId ? { id: data.id, name: data.name, color: data.color, order_index: data.order_index ?? 0 } : c
       );
       setCachedCategories(categories.value);
     } catch (e) {
@@ -151,6 +158,36 @@ export function useCategories(userId: () => string | undefined) {
     }
   };
 
+  const reorderCategories = async (reorderedCategories: CategoryOption[]) => {
+    // Optimistic update with new order indices
+    categories.value = reorderedCategories.map((cat, index) => ({
+      ...cat,
+      order_index: index
+    }));
+    setCachedCategories(categories.value);
+
+    try {
+      // Batch update all order indices
+      const updates = reorderedCategories.map((cat, index) => ({
+        id: cat.id,
+        order_index: index
+      }));
+
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('categories')
+          .update({ order_index: update.order_index })
+          .eq('id', update.id);
+
+        if (error) throw error;
+      }
+    } catch (e) {
+      console.error('Failed to reorder categories:', e);
+      // Refetch on error to sync with server
+      await fetchCategories();
+    }
+  };
+
   const getCategoryById = (catId: string): CategoryOption | undefined => {
     return categories.value.find(c => c.id === catId);
   };
@@ -177,9 +214,11 @@ export function useCategories(userId: () => string | undefined) {
     createCategory,
     updateCategory,
     deleteCategory,
+    reorderCategories,
     getCategoryById,
     getCategoryByName,
     refetch: fetchCategories,
     PASTEL_COLORS
   };
 }
+

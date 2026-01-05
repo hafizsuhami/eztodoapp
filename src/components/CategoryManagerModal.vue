@@ -15,6 +15,7 @@ const emit = defineEmits<{
   updateCategory: [id: string, updates: { name?: string; color?: string }];
   createCategory: [name: string, color: string];
   deleteCategory: [id: string];
+  reorderCategories: [categories: CategoryOption[]];
 }>();
 
 const editingId = ref<string | null>(null);
@@ -28,6 +29,11 @@ const newCategoryColor = ref(PASTEL_COLORS[0]);
 const showDeleteConfirm = ref(false);
 const categoryToDelete = ref<CategoryOption | null>(null);
 
+// Drag and drop state
+const draggedIndex = ref<number | null>(null);
+const dragOverIndex = ref<number | null>(null);
+const localCategories = ref<CategoryOption[]>([]);
+
 watch(() => props.isOpen, (open) => {
   if (open) {
     editingId.value = null;
@@ -37,8 +43,15 @@ watch(() => props.isOpen, (open) => {
     newCategoryColor.value = PASTEL_COLORS[0];
     showDeleteConfirm.value = false;
     categoryToDelete.value = null;
+    localCategories.value = [...props.categories];
   }
 });
+
+watch(() => props.categories, (cats) => {
+  if (props.isOpen && draggedIndex.value === null) {
+    localCategories.value = [...cats];
+  }
+}, { deep: true });
 
 // Check if category can be deleted:
 // - No tasks using it, OR all tasks using it are completed
@@ -101,13 +114,128 @@ const handleConfirmDelete = () => {
 
 const deleteConfirmMessage = computed(() => {
   if (!categoryToDelete.value) return '';
-  const info = getDeleteInfo(categoryToDelete.value.id);
   const tasksUsingCategory = props.tasks.filter(t => t.category === categoryToDelete.value!.id);
   if (tasksUsingCategory.length === 0) {
     return `Are you sure you want to delete the "${categoryToDelete.value.name}" category?`;
   }
   return `Are you sure you want to delete the "${categoryToDelete.value.name}" category? ${tasksUsingCategory.length} completed task(s) will lose their category assignment.`;
 });
+
+// Drag and drop handlers
+const handleDragStart = (index: number, event: DragEvent) => {
+  draggedIndex.value = index;
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', index.toString());
+  }
+};
+
+const handleDragOver = (index: number, event: DragEvent) => {
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move';
+  }
+  dragOverIndex.value = index;
+};
+
+const handleDragLeave = () => {
+  dragOverIndex.value = null;
+};
+
+const handleDrop = (dropIndex: number, event: DragEvent) => {
+  event.preventDefault();
+  
+  if (draggedIndex.value === null || draggedIndex.value === dropIndex) {
+    draggedIndex.value = null;
+    dragOverIndex.value = null;
+    return;
+  }
+
+  const newCategories = [...localCategories.value];
+  const [draggedItem] = newCategories.splice(draggedIndex.value, 1);
+  newCategories.splice(dropIndex, 0, draggedItem);
+
+  localCategories.value = newCategories;
+  emit('reorderCategories', newCategories);
+
+  draggedIndex.value = null;
+  dragOverIndex.value = null;
+};
+
+const handleDragEnd = () => {
+  draggedIndex.value = null;
+  dragOverIndex.value = null;
+};
+
+// Touch handlers for mobile
+const touchStartY = ref<number>(0);
+const touchCurrentY = ref<number>(0);
+const isTouchDragging = ref(false);
+const categoryElements = ref<HTMLElement[]>([]);
+
+const handleTouchStart = (index: number, event: TouchEvent) => {
+  const touch = event.touches[0];
+  touchStartY.value = touch.clientY;
+  touchCurrentY.value = touch.clientY;
+  draggedIndex.value = index;
+  isTouchDragging.value = true;
+  
+  // Collect category elements for hit testing
+  const container = (event.target as HTMLElement).closest('.category-list-container');
+  if (container) {
+    categoryElements.value = Array.from(container.querySelectorAll('.category-item'));
+  }
+};
+
+const handleTouchMove = (event: TouchEvent) => {
+  if (!isTouchDragging.value || draggedIndex.value === null) return;
+  
+  event.preventDefault();
+  const touch = event.touches[0];
+  touchCurrentY.value = touch.clientY;
+  
+  // Find which element we're over
+  const overIndex = categoryElements.value.findIndex(el => {
+    const rect = el.getBoundingClientRect();
+    return touch.clientY >= rect.top && touch.clientY <= rect.bottom;
+  });
+  
+  if (overIndex !== -1 && overIndex !== draggedIndex.value) {
+    dragOverIndex.value = overIndex;
+  }
+};
+
+const handleTouchEnd = () => {
+  if (!isTouchDragging.value) return;
+  
+  if (dragOverIndex.value !== null && dragOverIndex.value !== draggedIndex.value && draggedIndex.value !== null) {
+    const newCategories = [...localCategories.value];
+    const [draggedItem] = newCategories.splice(draggedIndex.value, 1);
+    newCategories.splice(dragOverIndex.value, 0, draggedItem);
+
+    localCategories.value = newCategories;
+    emit('reorderCategories', newCategories);
+  }
+  
+  // Reset touch state
+  isTouchDragging.value = false;
+  draggedIndex.value = null;
+  dragOverIndex.value = null;
+  touchStartY.value = 0;
+  touchCurrentY.value = 0;
+  categoryElements.value = [];
+};
+
+// Compute drag offset for touch dragging
+const getDragStyle = (index: number) => {
+  if (!isTouchDragging.value || draggedIndex.value !== index) return {};
+  const offset = touchCurrentY.value - touchStartY.value;
+  return {
+    transform: `translateY(${offset}px)`,
+    zIndex: 50,
+    position: 'relative' as const
+  };
+};
 </script>
 
 <template>
@@ -129,11 +257,27 @@ const deleteConfirmMessage = computed(() => {
 
         <div class="px-4 py-4 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
           <!-- Existing Categories -->
-          <div class="flex flex-col gap-2">
+          <div class="flex flex-col gap-2 category-list-container">
             <div
-              v-for="cat in categories"
+              v-for="(cat, index) in localCategories"
               :key="cat.id"
-              class="flex items-center gap-3 p-3 bg-slate-50 dark:bg-[#161f30] rounded-xl border border-slate-200 dark:border-slate-700"
+              draggable="true"
+              @dragstart="handleDragStart(index, $event)"
+              @dragover="handleDragOver(index, $event)"
+              @dragleave="handleDragLeave"
+              @drop="handleDrop(index, $event)"
+              @dragend="handleDragEnd"
+              @touchstart.passive="handleTouchStart(index, $event)"
+              @touchmove="handleTouchMove"
+              @touchend="handleTouchEnd"
+              class="category-item flex items-center gap-3 p-3 bg-slate-50 dark:bg-[#161f30] rounded-xl border border-slate-200 dark:border-slate-700 transition-all duration-200"
+              :class="{
+                'opacity-50 scale-95': draggedIndex === index && !isTouchDragging,
+                'shadow-lg': draggedIndex === index && isTouchDragging,
+                'border-primary border-2 bg-primary/5': dragOverIndex === index && draggedIndex !== index,
+                'cursor-grab': editingId !== cat.id
+              }"
+              :style="getDragStyle(index)"
             >
               <template v-if="editingId === cat.id">
                 <div class="flex flex-col gap-2 w-full">
@@ -170,6 +314,13 @@ const deleteConfirmMessage = computed(() => {
                 </div>
               </template>
               <template v-else>
+                <!-- Drag handle -->
+                <span 
+                  class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-grab active:cursor-grabbing shrink-0"
+                  title="Drag to reorder"
+                >
+                  <span class="material-symbols-outlined text-[18px]">drag_indicator</span>
+                </span>
                 <span
                   class="w-4 h-4 rounded-full shrink-0"
                   :style="{ backgroundColor: cat.color }"
@@ -248,3 +399,4 @@ const deleteConfirmMessage = computed(() => {
     />
   </Teleport>
 </template>
+

@@ -230,7 +230,7 @@ export function useTasks(userId: () => string | undefined, userName?: () => stri
           .single();
 
         if (createError) throw createError;
-        
+
         // Replace temp task with real one
         tasks.value = tasks.value.map(t => t.id === tempId ? created : t);
         setCachedTasks(tasks.value);
@@ -334,6 +334,50 @@ export function useTasks(userId: () => string | undefined, userName?: () => stri
 
   const updateSubtasks = (taskId: string, subtasks: Subtask[]) => {
     return updateTask(taskId, { subtasks });
+  };
+
+  const reorderTasks = async (reorderedTasks: Task[]) => {
+    // Optimistic update with new order indices
+    const updatedTasks = reorderedTasks.map((task, index) => ({
+      ...task,
+      order_index: index
+    }));
+
+    // Update local state
+    const reorderedIds = new Set(reorderedTasks.map(t => t.id));
+    tasks.value = tasks.value.map(t => {
+      if (reorderedIds.has(t.id)) {
+        const updated = updatedTasks.find(ut => ut.id === t.id);
+        return updated || t;
+      }
+      return t;
+    });
+    setCachedTasks(tasks.value);
+
+    if (isOnline()) {
+      try {
+        syncStatus.value = 'syncing';
+
+        // Batch update all order indices
+        for (const task of updatedTasks) {
+          if (!task.id.startsWith('temp_')) {
+            const { error: updateError } = await supabase
+              .from('tasks')
+              .update({ order_index: task.order_index })
+              .eq('id', task.id);
+
+            if (updateError) throw updateError;
+          }
+        }
+
+        syncStatus.value = 'synced';
+      } catch (e) {
+        console.error('Failed to reorder tasks:', e);
+        syncStatus.value = 'error';
+        // Refetch on error to sync with server
+        await fetchTasks();
+      }
+    }
   };
 
   // Event handlers
@@ -511,6 +555,7 @@ export function useTasks(userId: () => string | undefined, userName?: () => stri
     toggleTask,
     updateTaskCategory,
     updateSubtasks,
+    reorderTasks,
     refetch: fetchTasks
   };
 }

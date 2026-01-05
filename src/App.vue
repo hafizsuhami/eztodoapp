@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import Header from './components/Header.vue';
-import TaskCard from './components/TaskCard.vue';
+import TaskGroup from './components/TaskGroup.vue';
 import AddTaskModal from './components/AddTaskModal.vue';
 import EditTaskModal from './components/EditTaskModal.vue';
 import LoginModal from './components/LoginModal.vue';
@@ -139,7 +139,8 @@ const {
   deleteTask,
   toggleTask,
   updateTaskCategory,
-  updateSubtasks
+  updateSubtasks,
+  reorderTasks
 } = useTasks(getUserId, getUserName);
 
 // Categories composable
@@ -149,7 +150,8 @@ const {
   getCategoryById,
   createCategory,
   updateCategory: updateCategoryFn,
-  deleteCategory: deleteCategoryFn
+  deleteCategory: deleteCategoryFn,
+  reorderCategories
 } = useCategories(getUserId);
 
 // Local state
@@ -279,16 +281,20 @@ const filteredTasks = computed(() => {
 const groupedTasks = computed(() => {
   const groups: { label: string; icon: string; tasks: Task[]; color: string }[] = [];
 
+  // Helper to sort tasks by order_index
+  const sortByOrder = (taskList: Task[]) => 
+    [...taskList].sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+
   // Shared tab: group by Active and Completed
   if (activeTab.value === 'shared') {
     const incomplete = filteredTasks.value.filter(t => !t.is_completed);
     const completed = filteredTasks.value.filter(t => t.is_completed);
 
     if (incomplete.length > 0) {
-      groups.push({ label: 'Active', icon: 'task', tasks: incomplete, color: 'text-primary' });
+      groups.push({ label: 'Active', icon: 'task', tasks: sortByOrder(incomplete), color: 'text-primary' });
     }
     if (completed.length > 0) {
-      groups.push({ label: 'Completed', icon: 'task_alt', tasks: completed, color: 'text-green-500' });
+      groups.push({ label: 'Completed', icon: 'task_alt', tasks: sortByOrder(completed), color: 'text-green-500' });
     }
     return groups.length ? groups : [{ label: '', icon: '', tasks: [], color: '' }];
   }
@@ -296,7 +302,7 @@ const groupedTasks = computed(() => {
   // Only group in 'all' and 'today' views
   if (activeTab.value === 'completed' || searchQuery.value) {
     // No grouping for completed or search results
-    return [{ label: '', icon: '', tasks: filteredTasks.value, color: '' }];
+    return [{ label: '', icon: '', tasks: sortByOrder(filteredTasks.value), color: '' }];
   }
   
   const overdueTasks = filteredTasks.value.filter(t => isOverdue(t.due_date));
@@ -312,24 +318,24 @@ const groupedTasks = computed(() => {
   );
   
   if (overdueTasks.length > 0) {
-    groups.push({ label: 'Overdue', icon: 'warning', tasks: overdueTasks, color: 'text-red-500' });
+    groups.push({ label: 'Overdue', icon: 'warning', tasks: sortByOrder(overdueTasks), color: 'text-red-500' });
   }
   if (todayTasks.length > 0) {
-    groups.push({ label: 'Today', icon: 'today', tasks: todayTasks, color: 'text-amber-500' });
+    groups.push({ label: 'Today', icon: 'today', tasks: sortByOrder(todayTasks), color: 'text-amber-500' });
   }
   if (upcomingTasks.length > 0 && activeTab.value !== 'today') {
-    groups.push({ label: 'Upcoming', icon: 'event_upcoming', tasks: upcomingTasks, color: 'text-blue-500' });
+    groups.push({ label: 'Upcoming', icon: 'event_upcoming', tasks: sortByOrder(upcomingTasks), color: 'text-blue-500' });
   }
   if (otherTasks.length > 0 && activeTab.value === 'all') {
-    groups.push({ label: 'Later', icon: 'schedule', tasks: otherTasks, color: 'text-slate-400' });
+    groups.push({ label: 'Later', icon: 'schedule', tasks: sortByOrder(otherTasks), color: 'text-slate-400' });
   }
   if (noDueTasks.length > 0 && activeTab.value === 'all') {
-    groups.push({ label: 'No due date', icon: 'all_inbox', tasks: noDueTasks, color: 'text-slate-400' });
+    groups.push({ label: 'No due date', icon: 'all_inbox', tasks: sortByOrder(noDueTasks), color: 'text-slate-400' });
   }
   
   // If no groups were created, return ungrouped
   if (groups.length === 0) {
-    return [{ label: '', icon: '', tasks: filteredTasks.value, color: '' }];
+    return [{ label: '', icon: '', tasks: sortByOrder(filteredTasks.value), color: '' }];
   }
   
   return groups;
@@ -1019,31 +1025,24 @@ const getCategoryTaskCount = (catId: string) => {
 
           <!-- Grouped Task List -->
           <template v-else>
-            <div v-for="group in groupedTasks" :key="group.label" class="flex flex-col gap-3">
-              <!-- Section Header -->
-              <div v-if="group.label" class="flex items-center gap-2 pt-2">
-                <span :class="['material-symbols-outlined text-[18px]', group.color]" aria-hidden="true">{{ group.icon }}</span>
-                <h3 :class="['text-sm font-semibold', group.color]">{{ group.label }}</h3>
-                <span class="text-xs text-slate-400 dark:text-slate-500">({{ group.tasks.length }})</span>
-                <div class="flex-1 h-px bg-slate-200 dark:bg-slate-700 ml-2"></div>
-              </div>
-              
-              <!-- Tasks in group -->
-              <TaskCard
-                v-for="task in group.tasks"
-                :key="task.id"
-                :task="task"
-                :categories="categories"
-                @toggle="handleToggleTask(task.id)"
-                @toggle-subtask="handleToggleSubtask"
-                @delete="handleDeleteTask(task.id)"
-                @delete-subtask="handleDeleteSubtask"
-                @edit="handleEditTask"
-                @share="handleShareTask"
-                @update-subtask-title="handleUpdateSubtaskTitle"
-                @update-category="handleUpdateTaskCategory"
-              />
-            </div>
+            <TaskGroup
+              v-for="group in groupedTasks"
+              :key="group.label || 'ungrouped'"
+              :tasks="group.tasks"
+              :categories="categories"
+              :group-label="group.label"
+              :group-icon="group.icon"
+              :group-color="group.color"
+              @toggle="handleToggleTask"
+              @toggle-subtask="handleToggleSubtask"
+              @delete="handleDeleteTask"
+              @delete-subtask="handleDeleteSubtask"
+              @edit="handleEditTask"
+              @share="handleShareTask"
+              @update-subtask-title="handleUpdateSubtaskTitle"
+              @update-category="handleUpdateTaskCategory"
+              @reorder-tasks="reorderTasks"
+            />
           </template>
         </div>
 
@@ -1078,6 +1077,7 @@ const getCategoryTaskCount = (catId: string) => {
       @update-category="(id, updates) => updateCategoryFn(id, updates)"
       @create-category="(name, color) => createCategory(name, color)"
       @delete-category="(id) => deleteCategoryFn(id)"
+      @reorder-categories="(cats) => reorderCategories(cats)"
     />
 
     <ShareTaskModal

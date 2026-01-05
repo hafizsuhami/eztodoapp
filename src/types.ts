@@ -2,6 +2,7 @@ export interface CategoryOption {
   id: string;
   name: string;
   color: string;
+  order_index?: number;
 }
 
 export type CategoryId = string;
@@ -27,6 +28,7 @@ export interface Task {
   subtasks?: Subtask[];
   reminder_at?: string; // ISO timestamp for reminder notification
   reminder_sent?: boolean; // Whether the reminder has been sent
+  order_index?: number; // For manual ordering within groups
   created_at?: string;
   updated_at?: string;
   // Sharing metadata (populated when fetching)

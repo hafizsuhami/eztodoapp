@@ -424,9 +424,11 @@ export function useTasks(userId: () => string | undefined, userName?: () => stri
         syncStatus.value = 'synced';
       } catch (e) {
         console.error('Failed to empty trash:', e);
-        // Refetch to restore state
-        await fetchTasks();
-        syncStatus.value = 'error';
+        // Fallback to queueing deletes individually
+        trashedIds.forEach(id => {
+          addToQueue({ type: 'delete', recordId: id });
+        });
+        syncStatus.value = 'offline';
       }
     } else {
       // Queue all deletes

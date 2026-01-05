@@ -4,14 +4,14 @@ import Header from './components/Header.vue';
 import TaskGroup from './components/TaskGroup.vue';
 import AddTaskModal from './components/AddTaskModal.vue';
 import EditTaskModal from './components/EditTaskModal.vue';
-import LoginModal from './components/LoginModal.vue';
-import LandingPage from './components/LandingPage.vue';
-import CategoryManagerModal from './components/CategoryManagerModal.vue';
-import ConfirmModal from './components/ConfirmModal.vue';
-import ToastContainer from './components/ToastContainer.vue';
-import InstallPrompt from './components/InstallPrompt.vue';
 import ShareTaskModal from './components/ShareTaskModal.vue';
 import WhatsNewModal from './components/WhatsNewModal.vue';
+import BottomNav from './components/BottomNav.vue';
+import ConfirmModal from './components/ConfirmModal.vue';
+import CategoryManagerModal from './components/CategoryManagerModal.vue';
+import LandingPage from './components/LandingPage.vue';
+import ToastContainer from './components/ToastContainer.vue';
+import InstallPrompt from './components/InstallPrompt.vue';
 import { type TaskStatus, type Subtask, type CategoryId, type Task } from './types';
 import { useAuth } from './composables/useAuth';
 import { useTasks } from './composables/useTasks';
@@ -23,15 +23,11 @@ import { parseTaskInput, formatParsedDate } from './lib/parseTaskInput';
 
 // Build-time version info injected by Vite
 declare const __APP_VERSION__: string;
-declare const __GIT_COMMIT__: string;
-declare const __BUILD_DATE__: string;
 
 const appVersion = __APP_VERSION__;
-const gitCommit = __GIT_COMMIT__;
-const buildDate = __BUILD_DATE__;
 
 // Auth composable
-const { user, loading: authLoading, isAuthenticated, loginWithGoogle, logout, updateNotifySharedCompletion } = useAuth();
+const { user, loading: authLoading, isAuthenticated, loginWithGoogle, logout } = useAuth();
 
 // Toast notifications
 const toast = useToast();
@@ -106,7 +102,7 @@ watch(
   () => [user.value?.id, isSubscribed.value],
   async ([userId, subscribed]) => {
     if (userId && subscribed) {
-      await setExternalUserId(userId);
+      await setExternalUserId(userId as string);
     }
   },
   { immediate: true }
@@ -150,7 +146,6 @@ const {
 // Categories composable
 const {
   categories,
-  loading: categoriesLoading,
   getCategoryById,
   createCategory,
   updateCategory: updateCategoryFn,
@@ -159,6 +154,7 @@ const {
 } = useCategories(getUserId);
 
 // Local state
+const primaryTab = ref<'tasks' | 'shared' | 'bin'>('tasks');
 const activeTab = ref<TaskStatus>('today');
 const searchQuery = ref('');
 const categoryFilter = ref<CategoryId | null>(null);
@@ -171,9 +167,24 @@ const quickAddTitle = ref('');
 const isQuickAddFocused = ref(false);
 
 // Clear category filter when switching to shared or bin tab (categories don't apply)
-watch(activeTab, (newTab) => {
+watch(primaryTab, (newTab) => {
   if (newTab === 'shared' || newTab === 'bin') {
     categoryFilter.value = null;
+    activeTab.value = newTab === 'shared' ? 'shared' : 'bin';
+  } else if (newTab === 'tasks') {
+    activeTab.value = 'today';
+  }
+});
+
+watch(activeTab, (newTab) => {
+  if (newTab === 'shared') {
+    primaryTab.value = 'shared';
+    categoryFilter.value = null;
+  } else if (newTab === 'bin') {
+    primaryTab.value = 'bin';
+    categoryFilter.value = null;
+  } else if (['today', 'all', 'completed'].includes(newTab)) {
+    primaryTab.value = 'tasks';
   }
 });
 
@@ -238,7 +249,7 @@ const isOverdue = (dateStr: string) => {
 const activeCount = computed(() => tasks.value.filter(t => !t.is_completed).length);
 const completedCount = computed(() => tasks.value.filter(t => t.is_completed).length);
 const todayCount = computed(() => tasks.value.filter(t => !t.is_completed && (isToday(t.due_date) || isOverdue(t.due_date))).length);
-const sharedCount = computed(() => tasks.value.filter(t => t.is_shared_with_me).length);
+const sharedCount = computed(() => tasks.value.filter(t => t.is_shared_with_me && !t.is_completed).length);
 const binCount = computed(() => deletedTasks.value.length);
 
 const filteredTasks = computed(() => {
@@ -366,15 +377,6 @@ const currentDate = computed(() => {
 // Get user's first name for greeting
 const firstName = computed(() => user.value?.name?.split(' ')[0] || 'there');
 
-// Tab options with icons and counts
-const tabOptions: { key: TaskStatus; label: string; shortLabel: string; icon: string }[] = [
-  { key: 'today', label: 'Today', shortLabel: 'Today', icon: 'today' },
-  { key: 'all', label: 'All', shortLabel: 'All', icon: 'list' },
-  { key: 'completed', label: 'Done', shortLabel: 'Done', icon: 'task_alt' },
-  { key: 'shared', label: 'Shared', shortLabel: 'Shared', icon: 'group' },
-  { key: 'bin', label: 'Bin', shortLabel: 'Bin', icon: 'delete' }
-];
-
 const getTabCount = (tab: TaskStatus) => {
   switch (tab) {
     case 'today': return todayCount.value;
@@ -385,6 +387,20 @@ const getTabCount = (tab: TaskStatus) => {
     default: return 0;
   }
 };
+
+// Primary Bottom Tabs
+const bottomTabs = computed(() => [
+  { key: 'tasks', label: 'Tasks', icon: 'task_alt', count: activeCount.value + todayCount.value },
+  { key: 'shared', label: 'Shared', icon: 'group', count: sharedCount.value },
+  { key: 'bin', label: 'Bin', icon: 'delete' }
+]);
+
+// Top Filter Tabs (Only shown for 'tasks' primary tab)
+const filterTabs = [
+  { key: 'today', label: 'Today', shortLabel: 'Today', icon: 'today' },
+  { key: 'all', label: 'All', shortLabel: 'All', icon: 'list' },
+  { key: 'completed', label: 'Done', shortLabel: 'Done', icon: 'check_circle' }
+];
 
 // Keyboard shortcuts
 const handleGlobalKeydown = (event: KeyboardEvent) => {
@@ -788,7 +804,7 @@ const getCategoryTaskCount = (catId: string) => {
 
   <!-- Main App for authenticated users -->
   <template v-else>
-    <Header :user="user" :sync-status="syncStatus" @logout="logout" @update-notify-setting="updateNotifySharedCompletion" />
+    <Header :user="user" :sync-status="syncStatus" @logout="logout" />
 
     <main class="flex flex-1 justify-center py-6 px-4 md:px-8">
         <div class="flex flex-col max-w-[800px] w-full gap-6">
@@ -902,33 +918,36 @@ const getCategoryTaskCount = (catId: string) => {
 
             <!-- Tabs -->
             <div class="flex w-full sm:w-auto sm:flex-shrink-0 justify-start gap-1 sm:gap-2 px-1 overflow-x-auto scrollbar-hide">
-              <button
-                v-for="tab in tabOptions"
-                :key="tab.key"
-                @click="activeTab = tab.key"
-                :class="[
-                  'group flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 rounded-lg transition-all cursor-pointer text-xs sm:text-sm font-medium whitespace-nowrap flex-shrink-0',
-                  activeTab === tab.key
-                    ? 'bg-primary text-white shadow-md shadow-primary/20'
-                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'
-                ]"
-                :aria-label="tab.label"
-              >
-                <span class="material-symbols-outlined text-[16px] sm:text-[18px]" aria-hidden="true">{{ tab.icon }}</span>
-                <span class="sm:hidden">{{ tab.shortLabel }}</span>
-                <span class="hidden sm:inline">{{ tab.label }}</span>
-                <span
-                  v-if="getTabCount(tab.key) > 0"
+              <!-- Desktop / Mobile Top Tabs -->
+              <template v-if="primaryTab === 'tasks'">
+                <button
+                  v-for="tab in filterTabs"
+                  :key="tab.key"
+                  @click="activeTab = (tab.key as TaskStatus)"
                   :class="[
-                    'text-xs px-1 sm:px-1.5 py-0.5 rounded-full min-w-[18px] sm:min-w-[20px] text-center',
+                    'group flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg transition-all cursor-pointer text-sm font-medium whitespace-nowrap flex-shrink-0',
                     activeTab === tab.key
-                      ? 'bg-white/20 text-white'
-                      : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      ? 'bg-primary text-white shadow-md shadow-primary/20'
+                      : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                   ]"
                 >
-                  {{ getTabCount(tab.key) }}
-                </span>
-              </button>
+                  <span class="material-symbols-outlined text-[18px]">{{ tab.icon }}</span>
+                  <span>{{ tab.label }}</span>
+                  <span
+                    v-if="getTabCount(tab.key as TaskStatus) > 0"
+                    class="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                    :class="{ 'bg-white/20 text-white': activeTab === tab.key }"
+                  >
+                    {{ getTabCount(tab.key as TaskStatus) }}
+                  </span>
+                </button>
+              </template>
+
+              <!-- Shared/Bin specific breadcrumbs for mobile if not using bottom nav -->
+              <div v-else class="flex items-center gap-2 py-2 text-slate-900 dark:text-white font-bold px-2">
+                <span class="material-symbols-outlined text-primary">{{ primaryTab === 'shared' ? 'group' : 'delete' }}</span>
+                <span class="capitalize">{{ primaryTab }}</span>
+              </div>
             </div>
 
             <!-- Search -->
@@ -1183,10 +1202,10 @@ const getCategoryTaskCount = (catId: string) => {
       :categories="categories"
       :tasks="tasks"
       @close="isCategoryManagerOpen = false"
-      @update-category="(id, updates) => updateCategoryFn(id, updates)"
-      @create-category="(name, color) => createCategory(name, color)"
-      @delete-category="(id) => deleteCategoryFn(id)"
-      @reorder-categories="(cats) => reorderCategories(cats)"
+      @update-category="(id: string, updates: any) => updateCategoryFn(id, updates)"
+      @create-category="(name: string, color: string) => createCategory(name, color)"
+      @delete-category="(id: string) => deleteCategoryFn(id)"
+      @reorder-categories="(cats: any[]) => reorderCategories(cats)"
     />
 
     <ShareTaskModal
@@ -1244,6 +1263,12 @@ const getCategoryTaskCount = (catId: string) => {
     <WhatsNewModal
       :user-id="user?.id || null"
       :last-seen-version="user?.lastSeenChangelog || null"
+    />
+
+    <!-- Bottom Navigation (Mobile Only) -->
+    <BottomNav
+      v-model:activeTab="primaryTab"
+      :tabs="bottomTabs"
     />
   </template>
 </template>

@@ -29,7 +29,8 @@
       "Bash(\"C:\\Users\\hafiz\\.bun\\install\\global\\node_modules\\.bin\\supabase\" functions deploy notify-task-completion)",
       "Bash(git -C C:/dev/todo diff --stat package.json src/components/ShareTaskModal.vue src/composables/useAuth.ts src/composables/useTaskSharing.ts src/composables/useTasks.ts)",
       "Bash(git -C C:/dev/todo log --oneline -5)",
-      "Bash(git -C:*)"
+      "Bash(git -C:*)",
+      "Skill(frontend-design)"
     ]
   },
   "enableAllProjectMcpServers": true,

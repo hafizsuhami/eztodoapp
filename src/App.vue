@@ -7,11 +7,13 @@ import EditTaskModal from './components/EditTaskModal.vue';
 import ShareTaskModal from './components/ShareTaskModal.vue';
 import WhatsNewModal from './components/WhatsNewModal.vue';
 import BottomNav from './components/BottomNav.vue';
+import DesktopSidebar from './components/DesktopSidebar.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
 import CategoryManagerModal from './components/CategoryManagerModal.vue';
 import LandingPage from './components/LandingPage.vue';
 import ToastContainer from './components/ToastContainer.vue';
 import InstallPrompt from './components/InstallPrompt.vue';
+import SkeletonLoader from './components/SkeletonLoader.vue';
 import { type TaskStatus, type Subtask, type CategoryId, type Task } from './types';
 import { useAuth } from './composables/useAuth';
 import { useTasks } from './composables/useTasks';
@@ -19,6 +21,7 @@ import { useCategories } from './composables/useCategories';
 import { useToast } from './composables/useToast';
 import { usePushNotifications } from './composables/usePushNotifications';
 import { useTaskSharing } from './composables/useTaskSharing';
+import { useHaptics } from './composables/useHaptics';
 import { parseTaskInput, formatParsedDate } from './lib/parseTaskInput';
 
 // Build-time version info injected by Vite
@@ -31,6 +34,16 @@ const { user, loading: authLoading, isAuthenticated, loginWithGoogle, logout } =
 
 // Toast notifications
 const toast = useToast();
+
+// Haptic feedback
+const { haptic } = useHaptics();
+
+// Pull-to-refresh state
+const isPulling = ref(false);
+const pullDistance = ref(0);
+const isRefreshing = ref(false);
+const pullStartY = ref(0);
+const PULL_THRESHOLD = 80;
 
 // Push notifications - link OneSignal user to Supabase user
 const { setExternalUserId, isSubscribed } = usePushNotifications();
@@ -92,6 +105,51 @@ const handleDeclineShare = () => {
   window.history.replaceState({}, '', '/');
 };
 
+// Pull-to-refresh handlers
+const handlePullStart = (event: TouchEvent) => {
+  // Only start pull if at top of page
+  if (window.scrollY === 0 && !isRefreshing.value) {
+    isPulling.value = true;
+    pullStartY.value = event.touches[0].clientY;
+  }
+};
+
+const handlePullMove = (event: TouchEvent) => {
+  if (!isPulling.value || isRefreshing.value) return;
+
+  const currentY = event.touches[0].clientY;
+  const delta = currentY - pullStartY.value;
+
+  // Only allow pulling down (positive delta)
+  if (delta > 0) {
+    // Apply resistance - the further you pull, the harder it gets
+    pullDistance.value = Math.min(delta * 0.5, PULL_THRESHOLD * 1.5);
+
+    // Trigger haptic when passing threshold
+    if (pullDistance.value >= PULL_THRESHOLD && delta < PULL_THRESHOLD * 2) {
+      haptic.medium();
+    }
+  }
+};
+
+const handlePullEnd = async () => {
+  if (!isPulling.value) return;
+
+  if (pullDistance.value >= PULL_THRESHOLD && !isRefreshing.value) {
+    isRefreshing.value = true;
+    haptic.medium();
+
+    // Refresh tasks
+    await refreshTasks();
+
+    isRefreshing.value = false;
+    toast.success('Tasks refreshed');
+  }
+
+  pullDistance.value = 0;
+  isPulling.value = false;
+};
+
 // Check for share URL on mount
 onMounted(() => {
   checkShareUrl();
@@ -140,7 +198,8 @@ const {
   toggleTask,
   updateTaskCategory,
   updateSubtasks,
-  reorderTasks
+  reorderTasks,
+  refreshTasks
 } = useTasks(getUserId, getUserName);
 
 // Categories composable
@@ -688,21 +747,40 @@ const getCategoryTaskCount = (catId: string) => {
 
 <template>
   <!-- Loading State -->
-  <div v-if="authLoading" class="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#111722]">
-    <div class="flex flex-col items-center gap-4">
-      <span class="material-symbols-outlined text-4xl text-primary animate-spin">
-        progress_activity
-      </span>
-      <p class="text-slate-500 dark:text-slate-400">Loading...</p>
+  <div v-if="authLoading" class="min-h-screen flex items-center justify-center bg-background overflow-hidden relative">
+    <!-- Fun background blobs -->
+    <div class="absolute top-1/4 left-1/4 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl animate-pulse"></div>
+    <div class="absolute bottom-1/4 right-1/4 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl animate-pulse" style="animation-delay: 1s;"></div>
+    
+    <div class="flex flex-col items-center gap-6 relative z-10">
+      <div class="relative">
+        <div class="w-20 h-20 bg-rose-500/10 rounded-2xl rotate-6 flex items-center justify-center animate-bounce-load shadow-xl shadow-rose-500/20">
+          <span class="material-symbols-outlined text-5xl text-rose-500 drop-shadow-sm" style="font-variation-settings: 'FILL' 1;">
+            task_alt
+          </span>
+        </div>
+        <!-- Shadow blob that shrinks when icon goes up -->
+        <div class="absolute -bottom-4 left-1/2 -translate-x-1/2 w-12 h-2 bg-black/10 rounded-full blur-sm animate-pulse"></div>
+      </div>
+      
+      <div class="flex flex-col items-center gap-1">
+        <h2 class="text-xl font-bold bg-gradient-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent animate-pulse">
+          EZtodo
+        </h2>
+        <p class="text-slate-500 dark:text-slate-400 font-medium">Getting things ready...</p>
+      </div>
     </div>
   </div>
 
   <!-- Share Link Landing Page -->
-  <div v-else-if="shareToken" class="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#111722] p-4">
+  <div v-else-if="shareToken" class="min-h-screen flex items-center justify-center bg-background p-4">
     <div class="bg-white dark:bg-[#1e293b] rounded-2xl shadow-xl p-6 max-w-sm w-full border border-slate-200 dark:border-slate-700">
       <!-- Loading preview -->
       <div v-if="shareLoading && !sharePreview" class="flex flex-col items-center gap-3 py-8">
-        <span class="material-symbols-outlined text-3xl text-primary animate-spin">progress_activity</span>
+        <svg class="animate-spin size-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
         <p class="text-slate-500 dark:text-slate-400 text-sm">Loading task...</p>
       </div>
 
@@ -806,7 +884,47 @@ const getCategoryTaskCount = (catId: string) => {
   <template v-else>
     <Header :user="user" :sync-status="syncStatus" @logout="logout" />
 
-    <main class="flex flex-1 justify-center py-6 px-4 md:px-8">
+    <!-- Pull-to-refresh indicator -->
+    <Transition
+      enter-active-class="transition-all duration-200 ease-out"
+      enter-from-class="opacity-0 -translate-y-full"
+      enter-to-class="opacity-100 translate-y-0"
+      leave-active-class="transition-all duration-150"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0 -translate-y-full"
+    >
+      <div
+        v-if="pullDistance > 0 || isRefreshing"
+        class="fixed top-0 left-0 right-0 flex items-center justify-center pt-safe z-50"
+        :style="{ paddingTop: `calc(env(safe-area-inset-top, 0px) + ${Math.min(pullDistance * 0.5, 40)}px)` }"
+      >
+        <div
+          class="size-10 rounded-full bg-white dark:bg-slate-800 shadow-lg flex items-center justify-center transition-transform duration-200"
+          :class="{ 'animate-spin-smooth': isRefreshing }"
+          :style="{ transform: `rotate(${pullDistance * 3}deg)` }"
+        >
+          <span class="material-symbols-outlined text-primary text-[20px]">
+            {{ isRefreshing ? 'progress_activity' : (pullDistance >= PULL_THRESHOLD ? 'check' : 'arrow_downward') }}
+          </span>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Main layout with sidebar -->
+    <div class="flex min-h-[calc(100vh-57px)]">
+      <!-- Desktop Sidebar -->
+      <DesktopSidebar
+        v-model:activeTab="primaryTab"
+        :tabs="bottomTabs"
+      />
+
+      <main
+        class="flex flex-1 justify-center py-6 px-4 md:px-8 min-w-0"
+        @touchstart.passive="handlePullStart"
+        @touchmove.passive="handlePullMove"
+        @touchend="handlePullEnd"
+        @touchcancel="handlePullEnd"
+      >
         <div class="flex flex-col max-w-[800px] w-full gap-6">
 
           <!-- Heading & Summary -->
@@ -895,20 +1013,26 @@ const getCategoryTaskCount = (catId: string) => {
           </div>
 
 
-        <!-- Mobile FAB (Floating Action Button) -->
+        <!-- Mobile FAB (Floating Action Button) - positioned above bottom nav with safe area -->
         <button
           @click="isAddModalOpen = true"
-          class="md:hidden fixed bottom-6 right-6 z-40 size-14 flex items-center justify-center rounded-2xl bg-primary text-white shadow-xl shadow-primary/30 hover:bg-primary/90 active:scale-90 transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+          class="md:hidden fixed z-40 size-14 flex items-center justify-center rounded-2xl
+            bg-primary text-white shadow-primary-lg
+            active:scale-90 transition-all duration-200 ease-spring
+            focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          style="bottom: calc(4rem + env(safe-area-inset-bottom, 0px) + 1rem); right: 1rem;"
           aria-label="Add new task"
         >
-          <span class="material-symbols-outlined text-[28px]" aria-hidden="true">add</span>
+          <span
+            class="material-symbols-outlined text-[28px] transition-transform duration-200"
+            :class="{ 'rotate-45': isAddModalOpen }"
+            aria-hidden="true"
+          >add</span>
         </button>
 
         <!-- Loading State for Tasks -->
-        <div v-if="tasksLoading && tasks.length === 0" class="flex justify-center py-12">
-          <span class="material-symbols-outlined text-4xl text-primary animate-spin">
-            progress_activity
-          </span>
+        <div v-if="tasksLoading && tasks.length === 0" class="py-4">
+          <SkeletonLoader variant="task" :count="4" />
         </div>
 
         <!-- Filters & Search -->
@@ -1108,10 +1232,17 @@ const getCategoryTaskCount = (catId: string) => {
 
           <!-- REGULAR VIEWS (not bin) -->
           <template v-else>
-            <!-- Empty State -->
+            <!-- Empty State with floating animation -->
             <div v-if="filteredTasks.length === 0 && !tasksLoading" class="flex flex-col items-center justify-center py-16 px-4">
-              <div class="size-48 flex items-center justify-center mb-4">
-                <img src="./assets/empty-state.png" alt="No tasks" class="w-full h-full object-contain opacity-90 hover:scale-105 transition-transform duration-500" />
+              <div class="relative size-48 flex items-center justify-center mb-4">
+                <img
+                  src="./assets/empty-state.png"
+                  alt="No tasks"
+                  class="w-full h-full object-contain opacity-90 animate-float"
+                />
+                <!-- Floating decorative elements -->
+                <div class="absolute -top-4 -right-4 size-8 bg-primary/20 rounded-full animate-float-delayed" />
+                <div class="absolute -bottom-2 -left-2 size-6 bg-amber-400/30 rounded-lg rotate-12 animate-float-slow" />
               </div>
               <h3 class="text-xl font-bold text-slate-700 dark:text-slate-200 mb-1">
                 {{ hasActiveFilters ? 'No matching tasks' :
@@ -1176,6 +1307,7 @@ const getCategoryTaskCount = (catId: string) => {
 
       </div>
     </main>
+    </div>
 
     <!-- Footer with version -->
     <footer class="py-4 text-center text-xs text-slate-400 dark:text-slate-500">

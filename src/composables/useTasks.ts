@@ -676,6 +676,7 @@ export function useTasks(userId: () => string | undefined, userName?: () => stri
     updateTaskCategory,
     updateSubtasks,
     reorderTasks,
+    refreshTasks: fetchTasks,
     refetch: fetchTasks
   };
 }

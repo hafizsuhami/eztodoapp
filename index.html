@@ -12,10 +12,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="EZtodo" />
     <link rel="apple-touch-icon" href="/icon.png" />
-    <!-- Fonts -->
+    <!-- Fonts - DM Sans for body, Outfit for display -->
     <link href="https://fonts.googleapis.com" rel="preconnect"/>
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
     <!-- OneSignal SDK for Push Notifications -->
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
@@ -23,7 +23,7 @@
       window.OneSignalDeferred = window.OneSignalDeferred || [];
     </script>
 </head>
-<body class="bg-background-light dark:bg-background-dark min-h-screen font-display text-slate-900 dark:text-white transition-colors duration-200 selection:bg-primary/30">
+<body class="bg-background min-h-screen font-display text-slate-900 dark:text-white transition-colors duration-200 selection:bg-primary/30">
     <div id="app" class="relative flex h-full w-full flex-col overflow-x-hidden"></div>
     <script type="module" src="/src/main.ts"></script>
 </body>

@@ -4,17 +4,17 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 210 25% 96%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
+    --primary: 199 89% 48%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
+    --muted: 210 30% 94%;
     --muted-foreground: 215.4 16.3% 46.9%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
@@ -22,8 +22,14 @@
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --ring: 199 89% 48%;
     --radius: 0.75rem;
+
+    /* Design system tokens */
+    --touch-target-min: 44px;
+    --transition-fast: 150ms;
+    --transition-normal: 200ms;
+    --transition-slow: 300ms;
   }
 
   .dark {
@@ -53,25 +59,132 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Display headings use Outfit */
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: 'Outfit', 'DM Sans', system-ui, sans-serif;
   }
 }
 
 /* Custom animations */
 @keyframes bounce-once {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: scale(1);
   }
+
   50% {
     transform: scale(1.15);
   }
 }
 
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Checkbox check drawing animation */
+@keyframes draw-check {
+  from {
+    stroke-dashoffset: 1;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Completion particle burst */
+@keyframes particle-burst {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(var(--tx, 20px), var(--ty, -20px)) scale(0);
+  }
+}
+
+/* Pull to refresh spinner */
+@keyframes spin-smooth {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Skeleton loading pulse */
+@keyframes skeleton-pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Swipe reveal */
+@keyframes swipe-reveal {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Staggered list children */
+@keyframes stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bounce-load {
+
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-20px) scale(1.1);
+  }
+}
+
+.animate-bounce-load {
+  animation: bounce-load 0.8s cubic-bezier(0.36, 0, 0.66, -0.56) infinite alternate;
 }
 
 .animate-shimmer {
@@ -82,10 +195,182 @@
   animation: bounce-once 0.3s ease-in-out;
 }
 
+.animate-draw-check {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: draw-check 0.2s ease-out 0.1s forwards;
+}
+
+.animate-skeleton {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.animate-spin-smooth {
+  animation: spin-smooth 1s linear infinite;
+}
+
+/* Staggered children animation */
+.stagger-children>* {
+  animation: stagger-in 0.3s ease-out forwards;
+  opacity: 0;
+}
+
+.stagger-children>*:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.stagger-children>*:nth-child(2) {
+  animation-delay: 50ms;
+}
+
+.stagger-children>*:nth-child(3) {
+  animation-delay: 100ms;
+}
+
+.stagger-children>*:nth-child(4) {
+  animation-delay: 150ms;
+}
+
+.stagger-children>*:nth-child(5) {
+  animation-delay: 200ms;
+}
+
+.stagger-children>*:nth-child(6) {
+  animation-delay: 250ms;
+}
+
+.stagger-children>*:nth-child(7) {
+  animation-delay: 300ms;
+}
+
+.stagger-children>*:nth-child(8) {
+  animation-delay: 350ms;
+}
+
+.stagger-children>*:nth-child(9) {
+  animation-delay: 400ms;
+}
+
+.stagger-children>*:nth-child(10) {
+  animation-delay: 450ms;
+}
+
+/* Completion particle */
+.completion-particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: particle-burst 0.6s ease-out forwards;
+}
+
 /* Focus visible styles for better accessibility */
 @layer utilities {
   .focus-ring {
     @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2;
+  }
+
+  /* Enhanced focus visible for keyboard navigation */
+  .focus-visible-ring:focus-visible {
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+
+  /* Touch target minimum - expands hit area without changing visual size */
+  .touch-target {
+    position: relative;
+  }
+
+  .touch-target::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: max(100%, var(--touch-target-min, 44px));
+    height: max(100%, var(--touch-target-min, 44px));
+  }
+
+  /* Button press effect with spring animation */
+  .btn-press {
+    @apply transition-transform duration-150;
+    transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .btn-press:active {
+    transform: scale(0.95);
+  }
+
+  /* Primary button style */
+  .btn-primary {
+    @apply bg-primary text-primary-foreground font-semibold rounded-xl px-4 py-3;
+    @apply shadow-primary-sm hover:shadow-primary transition-all duration-200;
+  }
+
+  .btn-primary:hover {
+    @apply bg-primary/90;
+  }
+
+  .btn-primary:active {
+    @apply scale-95 shadow-xs;
+  }
+
+  .btn-primary:disabled {
+    @apply opacity-50 cursor-not-allowed shadow-none;
+  }
+
+  /* Secondary button style */
+  .btn-secondary {
+    @apply bg-secondary text-secondary-foreground font-medium rounded-xl px-4 py-3;
+    @apply border border-border hover:bg-accent transition-all duration-200;
+  }
+
+  .btn-secondary:active {
+    @apply scale-95;
+  }
+
+  /* Ghost button style */
+  .btn-ghost {
+    @apply bg-transparent hover:bg-accent text-foreground font-medium rounded-xl px-4 py-3;
+    @apply transition-all duration-200;
+  }
+
+  .btn-ghost:active {
+    @apply scale-95;
+  }
+
+  /* Card elevation on hover */
+  .card-interactive {
+    @apply bg-card border border-border rounded-xl;
+    @apply shadow-xs hover:shadow-sm hover:border-border/80;
+    @apply transition-all duration-200;
+  }
+
+  /* Safe area padding for mobile */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .px-safe {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Duration utilities */
+  .duration-fast {
+    transition-duration: var(--transition-fast, 150ms);
+  }
+
+  .duration-normal {
+    transition-duration: var(--transition-normal, 200ms);
+  }
+
+  .duration-slow {
+    transition-duration: var(--transition-slow, 300ms);
   }
 }
 
@@ -94,8 +379,357 @@
   @apply absolute -top-10 left-0 bg-primary text-white px-4 py-2 z-[100] focus:top-0 transition-all;
 }
 
+/* Task Card Premium Styles */
+@keyframes task-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes checkbox-ripple {
+  0% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+  }
+
+  100% {
+    box-shadow: 0 0 0 12px hsl(var(--primary) / 0);
+  }
+}
+
+@keyframes success-pulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+@keyframes strikethrough {
+  from {
+    width: 0;
+  }
+
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes badge-pop {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+
+  50% {
+    transform: scale(1.1);
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes subtle-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+  }
+
+  50% {
+    box-shadow: 0 0 20px 2px hsl(var(--primary) / 0.15);
+  }
+}
+
+.task-card-enter {
+  animation: task-card-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.checkbox-ripple {
+  animation: checkbox-ripple 0.4s ease-out;
+}
+
+.badge-pop {
+  animation: badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Premium Task Card */
+.task-card {
+  --card-border: hsl(220 13% 91%);
+  --card-bg: #ffffff;
+  --card-shadow: 0 2px 8px -2px rgb(0 0 0 / 0.08), 0 4px 16px -4px rgb(0 0 0 / 0.04);
+  --card-shadow-hover: 0 8px 24px -8px rgb(0 0 0 / 0.12), 0 4px 12px -4px rgb(0 0 0 / 0.06);
+
+  position: relative;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  box-shadow: var(--card-shadow);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.dark .task-card {
+  --card-border: hsl(220 20% 22%);
+  --card-bg: hsl(220 20% 14%);
+  --card-shadow: 0 2px 8px -2px rgb(0 0 0 / 0.3), 0 4px 16px -4px rgb(0 0 0 / 0.2);
+  --card-shadow-hover: 0 8px 24px -8px rgb(0 0 0 / 0.4), 0 4px 12px -4px rgb(0 0 0 / 0.25);
+}
+
+.task-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, hsl(var(--primary) / 0.03) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.task-card:hover {
+  border-color: hsl(var(--primary) / 0.25);
+  box-shadow: var(--card-shadow-hover);
+  transform: translateY(-2px);
+}
+
+.task-card:hover::before {
+  opacity: 1;
+}
+
+/* Left accent bar for priority indication */
+.task-card-accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 16px 0 0 16px;
+  transition: all 0.2s ease;
+}
+
+/* Completed state overlay */
+.task-card-completed {
+  /* Keep standard background */
+  --card-border: hsl(var(--border) / 0.8);
+  opacity: 1;
+}
+
+.task-card-completed:hover {
+  opacity: 1;
+  transform: none;
+  background-color: hsl(var(--muted) / 0.3);
+  /* Subtle hover effect instead */
+}
+
+/* Custom checkbox with premium styling */
+.task-checkbox {
+  --checkbox-size: 22px;
+  --checkbox-border: hsl(220 13% 75%);
+  --checkbox-bg: transparent;
+  --checkbox-check: white;
+  --checkbox-checked-bg: hsl(var(--primary));
+  --checkbox-checked-border: hsl(var(--primary));
+
+  position: relative;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  border: 2px solid var(--checkbox-border);
+  border-radius: 6px;
+  background: var(--checkbox-bg);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.task-checkbox:hover {
+  border-color: hsl(var(--primary));
+  transform: scale(1.08);
+  box-shadow: 0 0 0 4px hsl(var(--primary) / 0.1);
+}
+
+.task-checkbox.checked {
+  background: var(--checkbox-checked-bg);
+  border-color: var(--checkbox-checked-border);
+}
+
+.task-checkbox .check-icon {
+  color: var(--checkbox-check);
+  opacity: 0;
+  transform: scale(0);
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.task-checkbox.checked .check-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Title strikethrough animation */
+.task-title-strike {
+  position: relative;
+  display: inline;
+}
+
+.task-title-strike::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 0;
+  height: 2px;
+  background: currentColor;
+  opacity: 0.5;
+  transition: width 0.3s ease;
+}
+
+.task-title-strike.completed::after {
+  width: 100%;
+}
+
+/* Badge styles */
+.task-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 8px;
+  letter-spacing: 0.01em;
+  transition: all 0.2s ease;
+}
+
+.task-badge:hover {
+  transform: translateY(-1px);
+}
+
+.task-badge-overdue {
+  background: linear-gradient(135deg, hsl(0 84% 96%) 0%, hsl(0 84% 92%) 100%);
+  color: hsl(0 72% 45%);
+  border: 1px solid hsl(0 72% 88%);
+}
+
+.dark .task-badge-overdue {
+  background: linear-gradient(135deg, hsl(0 50% 18%) 0%, hsl(0 50% 14%) 100%);
+  color: hsl(0 72% 65%);
+  border-color: hsl(0 50% 25%);
+}
+
+.task-badge-today {
+  background: linear-gradient(135deg, hsl(38 92% 96%) 0%, hsl(38 92% 90%) 100%);
+  color: hsl(38 80% 38%);
+  border: 1px solid hsl(38 80% 82%);
+}
+
+.dark .task-badge-today {
+  background: linear-gradient(135deg, hsl(38 50% 18%) 0%, hsl(38 50% 14%) 100%);
+  color: hsl(38 80% 60%);
+  border-color: hsl(38 50% 25%);
+}
+
+.task-badge-date {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  border: 1px solid hsl(var(--border));
+}
+
+.task-badge-category {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--foreground) / 0.7);
+  border: 1px solid hsl(var(--border) / 0.5);
+  cursor: pointer;
+}
+
+.task-badge-category:hover {
+  background: hsl(var(--muted));
+  border-color: hsl(var(--border));
+}
+
+/* Action buttons with hover effects */
+.task-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: hsl(var(--muted-foreground));
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.task-action-btn:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  transform: scale(1.08);
+}
+
+.task-action-btn.danger:hover {
+  background: hsl(0 84% 95%);
+  color: hsl(0 72% 50%);
+}
+
+.dark .task-action-btn.danger:hover {
+  background: hsl(0 50% 15%);
+  color: hsl(0 72% 65%);
+}
+
+/* Subtask styles */
+.subtask-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.subtask-item:hover {
+  background: hsl(var(--muted) / 0.5);
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.subtask-checkbox {
+  --checkbox-size: 16px;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  border: 1.5px solid hsl(220 13% 75%);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.subtask-checkbox:hover {
+  border-color: hsl(var(--primary));
+}
+
+.subtask-checkbox.checked {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -104,17 +738,21 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  
+
   .animate-bounce-once {
     animation: none;
   }
-  
+
   .animate-spin {
     animation: none;
   }
-  
+
   .animate-pulse {
     animation: none;
+  }
+
+  .task-card:hover {
+    transform: none;
   }
 }
 

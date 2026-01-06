@@ -246,7 +246,7 @@ const handleClose = () => {
     >
       <div
         v-if="isOpen && task"
-        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/50 backdrop-blur-sm"
+        class="fixed inset-0 z-[70] flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/50 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-task-modal-title"

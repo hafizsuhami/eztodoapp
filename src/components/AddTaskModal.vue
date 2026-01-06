@@ -265,7 +265,7 @@ const handleReminderToggle = async () => {
   <Teleport to="body">
     <div
       v-if="isOpen"
-      class="fixed inset-0 z-50 flex items-end sm:items-start justify-center sm:p-4 sm:pt-12 bg-slate-900/50 backdrop-blur-sm transition-opacity"
+      class="fixed inset-0 z-[70] flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity"
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-task-modal-title"
@@ -273,9 +273,15 @@ const handleReminderToggle = async () => {
     >
       <div 
         ref="modalRef"
-        class="bg-white dark:bg-[#1e293b] rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-md overflow-hidden border border-slate-200 dark:border-slate-700 transform transition-all scale-100 pb-safe sm:pb-0"
+        class="bg-white dark:bg-[#1e293b] rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-700 transform transition-all"
+        style="padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem); max-height: 90vh;"
       >
-        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+        <!-- Mobile drag handle -->
+        <div class="sm:hidden flex justify-center pt-3 pb-1">
+          <div class="w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
+        </div>
+
+        <div class="flex items-center justify-between px-6 py-4 sm:pt-4 border-b border-slate-100 dark:border-slate-700">
           <h3 id="add-task-modal-title" class="text-lg font-bold text-slate-900 dark:text-white">Add New Task</h3>
           <button 
             @click="emit('close')"

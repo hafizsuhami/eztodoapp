@@ -20,6 +20,7 @@ export function useTasks(userId: () => string | undefined, userName?: () => stri
   const error = ref<string | null>(null);
   const syncStatus = ref<SyncStatus>('synced');
   const sharedTaskIds = ref<Set<string>>(new Set());
+  const pendingTempIds = ref<Set<string>>(new Set()); // Track pending task creations to prevent realtime duplicates
 
   // Fetch tasks from server (owned + shared)
   const fetchTasks = async () => {
@@ -212,6 +213,9 @@ export function useTasks(userId: () => string | undefined, userName?: () => stri
       user_id: id
     };
 
+    // Mark as pending to prevent realtime duplicate
+    pendingTempIds.value.add(tempId);
+
     // Optimistic update
     tasks.value = [newTask, ...tasks.value];
     setCachedTasks(tasks.value);
@@ -242,15 +246,18 @@ export function useTasks(userId: () => string | undefined, userName?: () => stri
         // Replace temp task with real one
         tasks.value = tasks.value.map(t => t.id === tempId ? created : t);
         setCachedTasks(tasks.value);
+        pendingTempIds.value.delete(tempId);
         syncStatus.value = 'synced';
       } catch (e) {
         console.error('Failed to create task:', e);
         // Queue for later
         addToQueue({ type: 'create', data: newTask, tempId });
+        pendingTempIds.value.delete(tempId);
         syncStatus.value = 'offline';
       }
     } else {
       addToQueue({ type: 'create', data: newTask, tempId });
+      pendingTempIds.value.delete(tempId);
       syncStatus.value = 'offline';
     }
   };
@@ -563,7 +570,19 @@ export function useTasks(userId: () => string | undefined, userName?: () => stri
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newTask = payload.new as Task;
-            tasks.value = [newTask, ...tasks.value.filter(t => t.id !== newTask.id)];
+            // Skip if we have pending temp tasks - createTask will handle the replacement
+            if (pendingTempIds.value.size > 0) {
+              return;
+            }
+            // Check if task already exists (from optimistic update in createTask)
+            const existingTask = tasks.value.find(t => t.id === newTask.id);
+            if (existingTask) {
+              // Task already exists, merge the update instead of duplicating
+              tasks.value = tasks.value.map(t => t.id === newTask.id ? { ...t, ...newTask } : t);
+            } else {
+              // New task from realtime, add it
+              tasks.value = [newTask, ...tasks.value];
+            }
             setCachedTasks(tasks.value);
           } else if (payload.eventType === 'UPDATE') {
             const updatedTask = payload.new as Task;
